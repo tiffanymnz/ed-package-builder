@@ -1,21 +1,50 @@
-import zipfile,tempfile,sys,csv
+import json
+import tempfile
+import unittest
 from pathlib import Path
-from collections import Counter
-from visual_intake import classify_records
-base=Path('/mnt/data'); samples=[]
-for zpath in sorted(base.glob('Workorder_*_Documents.zip')):
- with zipfile.ZipFile(zpath) as z:
-  imgs=[i for i in z.infolist() if i.filename.lower().endswith(('.jpg','.jpeg','.png'))]
-  picks=imgs[:6]+imgs[len(imgs)//2:len(imgs)//2+6]+imgs[-6:]
-  with tempfile.TemporaryDirectory() as t:
-   entries=[]
-   for j,i in enumerate(picks):
-    dest=Path(t)/f'{j}_{Path(i.filename).name}'
-    with z.open(i) as src,dest.open('wb') as out:out.write(src.read())
-    entries.append({'path':str(dest),'name':i.filename})
-   rows=classify_records(entries)
-   count=Counter(r['candidate'] for r in rows)
-   samples.append({'work_order':zpath.stem.split('_')[1],'files_in_zip':len(imgs),'sampled':len(rows),**count})
-with (base/'ED_v7_Visual_Triage_Test.csv').open('w',newline='') as f:
- cols=sorted(set().union(*(r.keys() for r in samples)));w=csv.DictWriter(f,fieldnames=cols);w.writeheader();w.writerows(samples)
-for r in samples:print(r)
+
+from PIL import Image
+from visual_intake import classify_records, export
+
+
+class TestVisual(unittest.TestCase):
+    def test_synthetic_images_and_exports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            photo = base / "synthetic.png"
+            Image.new("RGB", (80, 60), "blue").save(photo)
+            broken = base / "broken.jpg"
+            broken.write_bytes(b"not an image")
+
+            records = [
+                {"path": str(photo)},
+                {"path": str(broken)},
+                {"path": str(base / "missing.jpg")},
+            ]
+            rows = classify_records(records)
+            self.assertEqual(len(rows), 2)
+            self.assertNotEqual(
+                rows[0]["candidate"], "Unreadable image"
+            )
+            self.assertEqual(
+                rows[1]["candidate"], "Unreadable image"
+            )
+
+            output = base / "output"
+            exported, counts = export(
+                {"imported_files": records}, output
+            )
+            self.assertEqual(len(exported), 2)
+            self.assertEqual(sum(counts.values()), 2)
+
+            summary = json.loads(
+                (output / "Visual_Review_Summary.json").read_text()
+            )
+            self.assertEqual(summary["verified_assignments"], 0)
+            self.assertTrue(
+                (output / "Visual_Review_Candidates.csv").is_file()
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
