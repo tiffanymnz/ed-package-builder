@@ -1,0 +1,21 @@
+ED Package Builder v17 — portable Windows build instructions
+
+IMPORTANT: This is source + an automated Windows build recipe, NOT a Windows executable.
+No company photos, invoices, or case files should ever be uploaded to the build repository.
+
+To produce an EXE on an authorized development/build account:
+1. Create a private GitHub repository approved by your organization (or use an approved Windows CI runner).
+2. Place the CONTENTS of this folder at the repository root; ensure .github/workflows/build-windows.yml is present.
+3. In GitHub Actions run "Build portable Windows application" (workflow_dispatch).
+4. The workflow installs development dependencies on the remote runner, runs unit tests, builds a one-folder EXE, and executes that EXE in a headless smoke test.
+5. Only after all tests pass, download the "ED_Package_Builder_Windows_Portable" artifact.
+6. Extract it on an authorized Windows PC; double-click ED_Package_Builder.exe within the extracted folder. No Python installation is needed to run the built executable.
+7. Test import, opening cases, full photo review, document export, and real PDF conversion manually on Windows. The smoke test does NOT verify the GUI or PDF.
+
+LIMITATIONS:
+- No embedded vision model; local AI remains optional and requires separate approved model runtime.
+- PDF export currently depends on LibreOffice available locally. DOCX export remains available.
+- Executable is not signed; company endpoint controls may block it. Do not circumvent security controls.
+- Do not upload or publish vendor photos, addresses, or invoices into GitHub CI artifacts.
+- All COR exports remain drafts requiring human verification.
+- App sources in this ZIP have passed Linux unit tests; Windows CI has NOT yet been executed in this environment.
