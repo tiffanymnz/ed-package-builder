@@ -75,6 +75,7 @@ def current_stage(case,path):
     try:
         stat=Path(path).stat()
         if record.get('source_size')!=stat.st_size or record.get('source_mtime_ns')!=stat.st_mtime_ns:return 'review'
+        if record.get('sha256')!=file_digest(path):return 'review'
     except OSError:return 'review'
     return record.get('stage','review') if record.get('visual_confirmed') else 'review'
 

@@ -63,6 +63,18 @@ class VisualEvidenceTests(unittest.TestCase):
         self.case['before_photos']=[str(self.path)]
         self.assertTrue(property_review_issues(self.case))
 
+    def test_changed_contents_with_identical_size_and_timestamp_need_review(self):
+        import os
+        Image.new('RGB',(100,100),'blue').save(self.path,format='BMP')
+        apply_visual_stage(self.case,[str(self.path)],'before',visually_checked=True)
+        stat=self.path.stat()
+        Image.new('RGB',(100,100),'red').save(self.path,format='BMP')
+        os.utime(self.path,ns=(stat.st_atime_ns,stat.st_mtime_ns))
+        self.assertEqual(self.path.stat().st_size,stat.st_size)
+        self.assertEqual(self.path.stat().st_mtime_ns,stat.st_mtime_ns)
+        self.assertEqual(current_stage(self.case,str(self.path)),'review')
+        self.assertTrue(property_review_issues(self.case))
+
     def test_unreadable_file_does_not_partially_change_batch(self):
         with self.assertRaises(Exception):apply_visual_stage(self.case,[str(self.path),str(self.folder/'missing.jpg')],'after',visually_checked=True)
         self.assertEqual(self.case['after_photos'],[])
