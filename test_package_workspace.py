@@ -31,6 +31,9 @@ class PackageWorkspaceTests(unittest.TestCase):
             load['calculator_evidence']['path']=source()
             load['calculator_evidence']['sha256']=file_digest(load['calculator_evidence']['path'])
         for key in ('before_photos','during_photos','after_photos'):self.app.case[key]=[source()]
+        from visual_photo_review import apply_visual_stage
+        for stage,phase in [('before','before_photos'),('during','during_photos'),('after','after_photos')]:
+            apply_visual_stage(self.app.case,list(self.app.case[phase]),stage,visually_checked=True)
         self.app.case['financial_confirmation_note']='Synthetic Test Reference'
         self.app.case['bid_confirmation_hash']=bid_fingerprint(self.app.case)
         self.app.case['financial_confirmation_hash']=financial_fingerprint(self.app.case)

@@ -14,6 +14,7 @@ from ed_builder import volume
 from calculator_evidence import screenshot_status
 from cor_package import ROLES, document_suggestions, photo_suggestion, validate, assemble, description, totals, number
 from local_reader import read_image
+from visual_photo_review import PhotoReviewWindow, property_review_issues, apply_visual_stage, PHASE, CRITERIA
 SLOT_LABELS.update({key: value.title().replace('Cyd', 'CYD').replace('Pdf', 'PDF') for key,value in SLOT_LABELS.items()})
 
 guided_ui.STEPS[:] = [('Import Files', 'Start with the vendor files. No measurements or pricing required yet.'),
@@ -25,8 +26,14 @@ class PackageApp(GuidedApp):
     def __init__(self, root):
         self.scan_running = False
         super().__init__(root)
-        root.title('ED Package Builder | COR Workspace v19')
+        root.title('ED Package Builder | COR Workspace v20')
         self.status.set('Create a case with its case number and vendor, then import your files.')
+        def add_load_text_tool(widget):
+            if isinstance(widget,ttk.Menubutton):
+                menu=widget.nametowidget(str(widget['menu']))
+                menu.add_command(label='Review Load Text Suggestions',command=self.review_suggestions)
+            for child in widget.winfo_children():add_load_text_tool(child)
+        add_load_text_tool(root)
 
     def refresh(self):
         if self.case:
@@ -86,7 +93,7 @@ class PackageApp(GuidedApp):
         actions=ttk.Frame(self.case_tab);actions.pack(side='bottom',fill='x',pady=12)
         ttk.Button(actions,text='Review Document',command=self.edit_document).pack(side='left')
         ttk.Button(actions,text='Add Document',command=self.add_document).pack(side='left',padx=8)
-        ttk.Button(actions,text='Photo Suggestions',command=self.review_suggestions).pack(side='left')
+        ttk.Button(actions,text='Visual Photo Review',command=self.visual_photo_review).pack(side='left')
         listing=ttk.Frame(self.case_tab);listing.pack(fill='both',expand=True)
         self.documents=ttk.Treeview(listing,columns=('role','pages','status'),show='tree headings',height=6)
         tree=self.documents
@@ -176,8 +183,8 @@ class PackageApp(GuidedApp):
             rows,notes=results.get();self.scan_running=False
             if self.case_dir!=case_dir:return
             self.case['photo_suggestions']=rows;self.case['photo_text_cache']=cache;self.save()
-            self.status.set('Photo Reading Complete. Review the suggestions before applying them.' if not notes else 'Some photos could not be read. Review available suggestions or enter missing measurements.')
-            self.review_suggestions()
+            self.status.set('Photo Reading Complete. Open Visual Photo Review to inspect conditions and date clues.' if not notes else 'Some text could not be read. Visual Photo Review remains available; date-only photos are usable.')
+            # Reading text never assigns the property stage or interrupts work with a popup.
         self.root.after(150,poll)
 
     def review_suggestions(self):
@@ -211,6 +218,22 @@ class PackageApp(GuidedApp):
         ttk.Button(actions,text='Open Selected Photo',command=lambda:self.open_original(rows[int(tree.selection()[0])]['path']) if tree.selection() else None).pack(side='left')
         ttk.Button(actions,text='Apply Selected Suggestions',style='Primary.TButton',command=apply).pack(side='right')
 
+    def visual_photo_review(self):
+        if not self.require():return
+        self.save()
+        PhotoReviewWindow(self)
+
+    def assign(self):
+        slot=self.slot.get()
+        if slot in PHASE.values() and self.selected_photo:
+            stage=next(key for key,value in PHASE.items() if value==slot)
+            if not messagebox.askyesno('Confirm Visible Conditions',CRITERIA[stage]+'\n\nHave you checked the visible condition in this photo? Do not rely on the filename or date alone.'):return
+            try:
+                self.save();apply_visual_stage(self.case,[self.selected_photo],stage,visually_checked=True)
+                self.save();self.refresh_assignments()
+            except Exception as exc:messagebox.showerror('Photo Review Failed',str(exc))
+        else:super().assign()
+
     def draw_evidence(self):
         super().draw_evidence()
         if not self.case:return
@@ -218,7 +241,7 @@ class PackageApp(GuidedApp):
         row.pack(fill='x',before=self.evidence_tab.winfo_children()[0])
         ttk.Button(row,text='Review Container & Measurements',style='Primary.TButton',command=self.measurements).pack(side='left')
         ttk.Button(row,text='+ Add Load',command=self.add_load).pack(side='left',padx=8)
-        ttk.Label(row,text='A different container can be used for each load.',style='Muted.TLabel',wraplength=180).pack(side='left')
+        ttk.Button(row,text='Visual Photo Review',command=self.visual_photo_review).pack(side='left')
 
     def measurements(self):
         self.save();index=int(self.e_load.get())-1;load=self.case['loads'][index]
@@ -306,6 +329,7 @@ class PackageApp(GuidedApp):
     def evaluate(self):
         qty,gross,ded,issues=super().evaluate()
         for problem in validate(self.case):issues.append('BLOCKING / '+problem)
+        for problem in property_review_issues(self.case):issues.append('REVIEW / '+problem)
         for i,load in enumerate(self.case['loads'],1):
             if not load.get('measurements_confirmed'):issues.append(f'BLOCKING / Load {i} measurement: confirm the container dimensions and final fill.')
         return qty,gross,ded,list(dict.fromkeys(issues))
