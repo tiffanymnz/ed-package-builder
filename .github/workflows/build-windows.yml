@@ -42,6 +42,11 @@ jobs:
           $report = Join-Path $env:RUNNER_TEMP 'smoke.json'
           $exe = Resolve-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe'
           $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', $report) -Wait -PassThru
+                   if (Test-Path $report) {
+            Get-Content $report -Raw
+          } else {
+            Write-Host 'Smoke report missing: executable failed before reporting.'
+          }
           if ($process.ExitCode -ne 0) { throw 'Executable failed' }
           $result = Get-Content $report -Raw | ConvertFrom-Json
           if ($result.status -ne 'PASS' -or !$result.app_frozen) {
