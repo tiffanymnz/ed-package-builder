@@ -65,4 +65,46 @@ class PackageWorkspaceTests(unittest.TestCase):
         self.assertTrue(any('lowest bid' in issue.lower() for issue in issues))
         self.assertTrue(any('Financial rule not confirmed' in issue for issue in issues))
 
+    def test_add_jpg_invoice_confirm_and_export_original_image(self):
+        source=self.folder/'Vendor Invoice.jpg'
+        Image.new('RGB',(600,900),'white').save(source)
+        self.app.case['package_documents']=[d for d in self.app.case['package_documents'] if d['role']!='invoice']
+        with patch('tkinter.filedialog.askopenfilenames',return_value=(str(source),)),patch('tkinter.messagebox.showinfo'),patch.object(self.app,'scan_photos'):
+            self.app.add_document()
+        self.root.update()
+        def widgets(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from widgets(child)
+        confirm=next(w for w in widgets(self.root) if w.winfo_class()=='TButton' and w.cget('text')=='Confirm Document')
+        confirm.invoke();self.root.update()
+        invoice=next(d for d in self.app.case['package_documents'] if d['role']=='invoice')
+        self.assertTrue(invoice['confirmed'])
+        self.assertEqual(Path(invoice['path']).read_bytes(),source.read_bytes())
+        self.app.case['bid_review_confirmed']=True
+        self.app.case['bid_confirmation_hash']=bid_fingerprint(self.app.case)
+        self.assertEqual(self.app.evaluate()[3],[])
+        with patch('tkinter.messagebox.askyesno',return_value=False),patch('tkinter.messagebox.showinfo'),patch('tkinter.messagebox.showerror') as error,patch.object(self.app,'open_output'):
+            self.app.generate()
+        error.assert_not_called()
+        import fitz,json
+        report=json.loads((self.folder/'output'/'Package_Review.json').read_text())
+        section=next(s for s in report['sections'] if s['section']=='Vendor Invoice')
+        with fitz.open(self.folder/'output'/'TEST-001_COR_PACKAGE_DRAFT.pdf') as pdf:
+            self.assertTrue(pdf[section['start_page']-1].get_images())
+
+    def test_assign_existing_image_as_financial_document_bypasses_pdf_restriction(self):
+        source=self.app.case['before_photos'][0]
+        self.app.selected_photo=source;self.app.slot.set('financial_pdfs')
+        with patch.object(self.app,'edit_document') as editor,patch('tkinter.messagebox.showwarning') as warning:
+            self.app.assign()
+        editor.assert_called_once();warning.assert_not_called()
+        self.assertTrue(any(d['path']==source for d in self.app.case['package_documents']))
+
+    def test_register_document_twice_does_not_duplicate_image(self):
+        source=self.app.case['before_photos'][0]
+        first=self.app.register_document(source);second=self.app.register_document(source)
+        self.assertEqual(first,second)
+        self.assertEqual(sum(d['path']==source for d in self.app.case['package_documents']),1)
+
 if __name__=='__main__':unittest.main()

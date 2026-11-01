@@ -16,6 +16,7 @@ from cor_package import ROLES, document_suggestions, photo_suggestion, validate,
 from local_reader import read_image
 from visual_photo_review import PhotoReviewWindow, property_review_issues, apply_visual_stage, PHASE, CRITERIA
 SLOT_LABELS.update({key: value.title().replace('Cyd', 'CYD').replace('Pdf', 'PDF') for key,value in SLOT_LABELS.items()})
+SLOT_LABELS['financial_pdfs'] = 'Invoice / Financial Document'
 
 guided_ui.STEPS[:] = [('Import Files', 'Start with the vendor files. No measurements or pricing required yet.'),
                      ('Review Loads', 'Match the photos, then confirm only the details that need your input.'),
@@ -26,7 +27,7 @@ class PackageApp(GuidedApp):
     def __init__(self, root):
         self.scan_running = False
         super().__init__(root)
-        root.title('ED Package Builder | COR Workspace v20')
+        root.title('ED Package Builder | COR Workspace v21')
         self.status.set('Create a case with its case number and vendor, then import your files.')
         def add_load_text_tool(widget):
             if isinstance(widget,ttk.Menubutton):
@@ -89,7 +90,7 @@ class PackageApp(GuidedApp):
         count=len(self.case.get('imported_files',[]))
         ttk.Label(header,text=f'{count} Files Imported  ·  {len(self.case["loads"])} Load(s)',style='Card.TLabel',foreground=ACCENT).pack(anchor='w',pady=(12,0))
         ttk.Label(self.case_tab,text='Package Documents',font=(self.ui_font,13,'bold')).pack(anchor='w',pady=(0,6))
-        ttk.Label(self.case_tab,text='Open a row to confirm its purpose. One PDF can be split into sections by page range.',style='Muted.TLabel',wraplength=650).pack(anchor='w',pady=(0,10))
+        ttk.Label(self.case_tab,text='Add invoices and bids as images or PDFs. Open a row to confirm its purpose. PDF sections can use page ranges.',style='Muted.TLabel',wraplength=650).pack(anchor='w',pady=(0,10))
         actions=ttk.Frame(self.case_tab);actions.pack(side='bottom',fill='x',pady=12)
         ttk.Button(actions,text='Review Document',command=self.edit_document).pack(side='left')
         ttk.Button(actions,text='Add Document',command=self.add_document).pack(side='left',padx=8)
@@ -119,8 +120,28 @@ class PackageApp(GuidedApp):
         if any(Path(record['path']).suffix.lower() in IMAGE_EXT for record in self.case.get('imported_files',[])):self.scan_photos()
 
     def add_document(self):
-        paths=filedialog.askopenfilenames(title='Add Package Documents',filetypes=[('Documents','*.pdf *.png *.jpg *.jpeg *.docx')])
-        if paths:self._import_paths([Path(p) for p in paths])
+        if not self.require():return
+        paths=filedialog.askopenfilenames(title='Add Invoices, Bids or Supporting Documents',filetypes=[('Images and Documents','*.pdf *.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff *.docx')])
+        if not paths:return
+        digests={hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths}
+        self._import_paths([Path(p) for p in paths])
+        indices=[]
+        for record in self.case.get('imported_files',[]):
+            if record.get('sha256') in digests:indices.append(self.register_document(record['path']))
+        self.save();self.draw_case()
+        if len(indices)==1:
+            self.documents.selection_set(str(indices[0]));self.edit_document()
+        self.status.set('Documents Added. Confirm each document purpose before export.')
+
+    def register_document(self,path):
+        documents=self.case.setdefault('package_documents',[])
+        for index,record in enumerate(documents):
+            if record['path']==path:return index
+        source=next((r for r in self.case.get('imported_files',[]) if r['path']==path),dict(path=path,name=Path(path).name))
+        records=document_suggestions(source)
+        index=len(documents);documents.extend(records)
+        self.case['bid_review_confirmed']=False
+        return index
 
     def edit_document(self):
         selected=self.documents.selection()
@@ -225,6 +246,15 @@ class PackageApp(GuidedApp):
 
     def assign(self):
         slot=self.slot.get()
+        if slot=='financial_pdfs' and self.selected_photo:
+            try:
+                if Path(self.selected_photo).suffix.lower() not in IMAGE_EXT|{'.pdf'}:
+                    raise ValueError('Choose an image or PDF for this document.')
+                self.save();index=self.register_document(self.selected_photo)
+                self.save();self.go(0);self.draw_case()
+                self.documents.selection_set(str(index));self.edit_document()
+            except Exception as exc:messagebox.showerror('Cannot Add Document',str(exc))
+            return
         if slot in PHASE.values() and self.selected_photo:
             stage=next(key for key,value in PHASE.items() if value==slot)
             if not messagebox.askyesno('Confirm Visible Conditions',CRITERIA[stage]+'\n\nHave you checked the visible condition in this photo? Do not rely on the filename or date alone.'):return
