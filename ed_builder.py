@@ -67,7 +67,7 @@ def calc_image(vol,out):
         d.text((28,283),'Uniform overage height applies only if supported by measurements.',font=b,fill='#a12e22')
     d.line((25,358,1170,358),fill='#ddd',width=3)
     d.text((28,380),f"Calculated measured volume: {vol['total']:.2f} CYD",font=c,fill='#222')
-    d.text((28,485),'Generated calculation record — NOT a CalculatorSoup website screenshot',font=ImageFont.truetype(font,17) if 'font' in locals() else b,fill='#555')
+        d.text((28,485),'Generated calculation record — NOT a CalculatorSoup website screenshot',font=b,fill='#555')
     im.save(out)
 
 def remove_pictures(cell):
