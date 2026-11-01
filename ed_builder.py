@@ -6,7 +6,8 @@ from pathlib import Path
 from docx import Document
 from docx.shared import Inches,Pt
 from docx.oxml import OxmlElement
-from PIL import Image,ImageDraw,ImageFont
+from PIL import Image
+from calculator_evidence import screenshot_status
 
 SLOTS1 = ['calculator','height','width','length','empty','quarter']
 SLOTS2 = ['half','three_quarters','full_1','full_2','receipt']
@@ -38,9 +39,12 @@ def volume(load):
     over=numeric(load.get('overage_height_ft',0),'overage_height_ft')
     explicit=numeric(load.get('overage_cyd',0),'overage_cyd')
     if over>0 and explicit>0:raise ValueError('Enter either uniform overage height OR separately measured overage CYD, not both')
+    fill=numeric(load.get('fill_fraction',1),'fill_fraction',.01)
+    if fill>1:raise ValueError('Fill fraction must be greater than 0 and at most 1')
+    if fill<1 and (over or explicit):raise ValueError('Overage requires a full container; review the measurements')
     # Uniform height only where vendor states overage spans whole footprint.
     return {'container':L*W*H/27,'overage':(L*W*over/27 if over else explicit),
-            'total':L*W*(H+over)/27+explicit,'length':L,'width':W,'height':H,'over_height':over}
+            'total':L*W*(H*fill+over)/27+explicit,'length':L,'width':W,'height':H,'over_height':over}
 
 def image_file(p):
     p=Path(p)
@@ -51,30 +55,6 @@ def image_file(p):
         return io.BytesIO(raw)
     if p.suffix.lower() in ('.jpg','.jpeg','.png','.bmp','.webp','.tif','.tiff'):return str(p)
     return None
-
-def calc_image(vol,out):
-    """Auditable calculator-style display; NOT a screenshot from CalculatorSoup."""
-    im=Image.new('RGB',(1200,520),'white');d=ImageDraw.Draw(im)
-    def load_font(size):
-        for name in ('C:/Windows/Fonts/arial.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'):
-            try:
-                return ImageFont.truetype(name, size)
-            except OSError:
-                pass
-        return ImageFont.load_default(size=size)
-    a, b, c = load_font(32), load_font(25), load_font(42)
-    d.rectangle((2,2,1197,516),outline='#999999',width=3)
-    d.rectangle((3,3,1196,80),fill='#ac3129')
-    d.text((30,24),'Cubic Yards Calculation',font=a,fill='white')
-    d.text((28,115),f"Length: {vol['length']:g} ft     Width: {vol['width']:g} ft     Height: {vol['height']:g} ft",font=b,fill='#222')
-    d.text((28,174),f"Container capacity: {vol['container']:.2f} CYD",font=b,fill='#222')
-    if vol['overage']:
-        d.text((28,225),f"Documented overage: {vol['overage']:.2f} CYD",font=b,fill='#222')
-        d.text((28,283),'Uniform overage height applies only if supported by measurements.',font=b,fill='#a12e22')
-    d.line((25,358,1170,358),fill='#ddd',width=3)
-    d.text((28,380),f"Calculated measured volume: {vol['total']:.2f} CYD",font=c,fill='#222')
-    d.text((28,485),'Generated calculation record — NOT a CalculatorSoup website screenshot',font=load_font(17),fill='#555')
-    im.save(out)
 
 def remove_pictures(cell):
     # Remove images and preserve title paragraphs / table formatting.
@@ -136,8 +116,12 @@ def build(data,dest):
             'length':t1.cell(1,1),'empty':t1.cell(2,0),'quarter':t1.cell(2,1),
             'half':t2.cell(0,0),'three_quarters':t2.cell(0,1),
             'full_1':t2.cell(1,0),'full_2':t2.cell(1,1),'receipt':t2.cell(2,0)}
-        calcpath=calc_dir/f'load_{i}_calculation.png';calc_image(v,calcpath)
-        put_picture(cells['calculator'],str(calcpath),2.9,2.1)
+        calcpath, calc_issue = screenshot_status(load)
+        if calc_issue:
+            errors.append(f'Load {i}: {calc_issue}')
+            cells['calculator'].add_paragraph('CalculatorSoup screenshot missing or needs review. DRAFT ONLY.')
+        else:
+            put_picture(cells['calculator'],calcpath,2.9,2.1)
         missing=[]
         for key in ALL:
             if key=='calculator':continue
@@ -155,7 +139,7 @@ def build(data,dest):
         if recorded not in (None,'') and abs(numeric(recorded,'measured_load_cyd')-v['total'])>.05:
             errors.append(f'Load {i}: vendor claims {float(recorded):.2f} CYD, calculated {v["total"]:.2f} CYD')
         if not load.get('evidence_first_10_cyd') and i==1:errors.append('First 10 CYD supporting evidence not linked; confirm separately')
-        manifest.append({'load':i,'container_cyd':round(v['container'],2),'overage_cyd':round(v['overage'],2),'total_cyd':round(v['total'],2),'missing_slots':missing,'photos':photos})
+        manifest.append({'load':i,'container_cyd':round(v['container'],2),'overage_cyd':round(v['overage'],2),'total_cyd':round(v['total'],2),'missing_slots':missing,'photos':photos,'calculator_evidence':load.get('calculator_evidence',{}),'calculator_issue':calc_issue})
     # Append property photos without changing per-load two page layout.
     for name,label in [('before_photos','BEFORE PHOTOS'),('during_photos','DURING PHOTOS'),('after_photos','AFTER PHOTOS')]:
         imgs=[p for p in data.get(name,[]) if image_file(p)]

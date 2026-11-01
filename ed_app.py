@@ -504,7 +504,7 @@ class App:
     c=self.case
     keys=['rate_per_cyd','invoice_quantity_cyd','invoice_amount_usd','invoice_deduction_usd','invoice_quantity_basis','invoice_deduction_status','first_10_prior_work','verified_first_10_amount','financial_confirmation_note']
     obj={k:str(c.get(k,'')) for k in keys}
-    obj['load_dimensions']=[{k:str(l.get(k,'')) for k in ('length_ft','width_ft','side_height_ft','overage_height_ft','overage_cyd','measured_load_cyd')} for l in c.get('loads',[])]
+    obj['load_dimensions']=[{k:str(l.get(k,'')) for k in ('length_ft','width_ft','side_height_ft','overage_height_ft','overage_cyd','measured_load_cyd','fill_fraction')} for l in c.get('loads',[])]
     return hashlib.sha256(json.dumps(obj,sort_keys=True).encode()).hexdigest()
  def confirm_financial_rule(self):
     if not self.require():return
@@ -563,7 +563,7 @@ class App:
        if (as_number(l.get('overage_cyd'))>0 or as_number(l.get('overage_height_ft'))>0) and not l.get('overage_note'):issues.append(f'BLOCKING / Load {i}: overage evidence is not documented')
     if not c['loads'][0].get('evidence_first_10_cyd'):issues.append('BLOCKING / First 10 CYD progression/remaining debris evidence unlinked')
     if not c.get('before_photos') or not c.get('after_photos'):issues.append('BLOCKING / Missing property before and/or after photo selections')
-    qty=sum(volumes);rate=as_number(c.get('rate_per_cyd'));gross=qty*rate
+    qty=round(sum(round(value,2) for value in volumes),2);rate=as_number(c.get('rate_per_cyd'));gross=round(qty*rate,2)
     first=c.get('first_10_prior_work','unknown')
     raw=c.get('verified_first_10_amount','')
     try:
@@ -673,7 +673,14 @@ def packaged_smoke_test(report_path):
             assert doc.is_file() and doc.stat().st_size > 10000, 'No usable DOCX generated'
             assert len(document.tables) == 2, f'Expected two load tables; got {len(document.tables)}'
             assert len(review['loads']) == 1, 'Load manifest mismatch'
-            assert (temp/'calculation_records'/'load_1_calculation.png').is_file(), 'Calculation image missing'
+            assert review['loads'][0]['calculator_issue'], 'Missing calculator screenshot was not flagged'
+            from guided_ui import GuidedApp
+            from calculator_evidence import screenshot_status
+            assert screenshot_status(example['loads'][0])[0] is None
+            from cor_package import assemble
+            packet = temp/'cor_packet.pdf'
+            packet_report = assemble(example, packet)
+            assert packet.is_file() and packet_report['pages'] >= 3, 'Complete package PDF assembly failed'
             result.update(status='PASS', tables=len(document.tables), generated_docx_bytes=doc.stat().st_size)
     except Exception as exc:
         result['error']=repr(exc)
@@ -685,4 +692,7 @@ if __name__=='__main__':
  if len(sys.argv)==3 and sys.argv[1]=='--smoke-test':
     sys.exit(packaged_smoke_test(sys.argv[2]))
  BASE.mkdir(exist_ok=True)
- root=tk.Tk();app=App(root);root.mainloop()
+ sys.modules.setdefault('ed_app', sys.modules[__name__])
+ from guided_ui import GuidedApp
+ from package_ui import PackageApp
+ root=tk.Tk();app=PackageApp(root);root.mainloop()
