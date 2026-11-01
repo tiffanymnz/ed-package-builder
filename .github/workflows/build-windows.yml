@@ -8,52 +8,116 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: windows-portable-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 15
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
         run: |
           python -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip install pyinstaller
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run tests
         run: python -m unittest discover -p "test_*.py" -v
 
       - name: Build portable application
-        run: >
-          python -m PyInstaller
-          --noconfirm --clean --windowed --onedir
-          --name ED_Package_Builder
-          --add-data "Debris Progression template.docx;."
-          --collect-submodules fitz
-          --collect-submodules PIL
-          ed_app.py
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --console --onedir --name ED_Package_Builder --add-data "Debris Progression template.docx;." --collect-submodules fitz --collect-submodules PIL ed_app.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe')) {
+            throw 'Executable missing'
+          }
+          if (!(Test-Path 'dist/ED_Package_Builder/_internal/Debris Progression template.docx')) {
+            throw 'Bundled template missing'
+          }
 
       - name: Test executable
+        timeout-minutes: 3
         shell: pwsh
         run: |
           $report = Join-Path $env:RUNNER_TEMP 'smoke.json'
-          $exe = Resolve-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe'
-          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', $report) -Wait -PassThru
-                   if (Test-Path $report) {
-            Get-Content $report -Raw
-          } else {
-            Write-Host 'Smoke report missing: executable failed before reporting.'
+          $stdout = Join-Path $env:RUNNER_TEMP 'smoke-out.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'smoke-error.txt'
+          $exe = (Resolve-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe').Path
+
+          $process = Start-Process `
+            -FilePath $exe `
+            -ArgumentList @('--smoke-test', "`"$report`"") `
+            -PassThru `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr
+
+          $finished = $process.WaitForExit(120000)
+
+          if (!$finished) {
+            taskkill /PID $process.Id /T /F
           }
-          if ($process.ExitCode -ne 0) { throw 'Executable failed' }
+
+          Write-Host '--- Standard output ---'
+          if (Test-Path $stdout) {
+            Get-Content $stdout
+          }
+
+          Write-Host '--- Error output ---'
+          if (Test-Path $stderr) {
+            Get-Content $stderr
+          }
+
+          Write-Host '--- Smoke-test report ---'
+          if (Test-Path $report) {
+            Get-Content $report -Raw
+          }
+
+          if (!$finished) {
+            throw 'Executable timed out after two minutes'
+          }
+
+          $process.Refresh()
+          if ($process.ExitCode -ne 0) {
+            throw "Executable failed with exit code $($process.ExitCode); see output above"
+          }
+
+          if (!(Test-Path $report)) {
+            throw 'Executable did not create a smoke-test report'
+          }
+
           $result = Get-Content $report -Raw | ConvertFrom-Json
           if ($result.status -ne 'PASS' -or !$result.app_frozen) {
             throw 'Packaged application smoke test failed'
           }
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ED_Build_Diagnostics
+          path: |
+            ${{ runner.temp }}/smoke.json
+            ${{ runner.temp }}/smoke-out.txt
+            ${{ runner.temp }}/smoke-error.txt
+            build/ED_Package_Builder/warn-ED_Package_Builder.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload portable application
+        uses: actions/upload-artifact@v4
         with:
           name: ED_Package_Builder_Windows_Portable
           path: dist/ED_Package_Builder/
