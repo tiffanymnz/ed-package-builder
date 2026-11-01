@@ -17,6 +17,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
 
+    defaults:
+      run:
+        shell: pwsh
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -37,10 +41,16 @@ jobs:
         run: python -m unittest discover -p "test_*.py" -v
 
       - name: Build portable application
-        shell: pwsh
         run: |
-          python -m PyInstaller --noconfirm --clean --console --onedir --name ED_Package_Builder --add-data "Debris Progression template.docx;." --collect-submodules fitz --collect-submodules PIL ed_app.py
+          python -m py_compile ed_builder.py ed_app.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          python -c "import ed_builder; print('Builder loaded:', ed_builder.__file__); import ed_app; print('Application imports passed')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          python -m PyInstaller --noconfirm --clean --console --onedir --paths "." --hidden-import ed_builder --name ED_Package_Builder --add-data "Debris Progression template.docx;." --collect-submodules fitz --collect-submodules PIL ed_app.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           if (!(Test-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe')) {
             throw 'Executable missing'
           }
@@ -50,7 +60,6 @@ jobs:
 
       - name: Test executable
         timeout-minutes: 3
-        shell: pwsh
         run: |
           $report = Join-Path $env:RUNNER_TEMP 'smoke.json'
           $stdout = Join-Path $env:RUNNER_TEMP 'smoke-out.txt'
