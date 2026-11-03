@@ -1,0 +1,201 @@
+V33 TEMPLATE SHORTLIST DEVELOPMENT CHECK - November 3, 2026
+
+PURPOSE
+Suggest a small candidate set for each template photo purpose; the user explicitly
+selects the photo. This is not dependable unattended package assembly.
+
+METHOD
+A small linear ranking head uses the existing frozen 512-dimensional CLIP image
+features. Training: four properties, nine loads, 90 template slot images plus 150
+background images (240 total). Runtime coefficients are about 59 KB and require
+NumPy, not scikit-learn or an additional image model.
+
+Evaluation: two other properties excluded from this head's training, six loads,
+60 slot images and 127 backgrounds (187 total). These properties were examined in
+prior development, and model variants were compared using them. They are NOT an
+untouched independent validation set. Reference purpose/load labels came from
+approved package positions, not a separate blinded human audit. Source receipt
+pages were rendered as images for this evaluation.
+
+Nine purposes per load were evaluated: height, width, length, empty, quarter,
+half, three-quarters, full and receipt. Full 1 / Full 2 were pooled. That produces
+54 load/purpose combinations, not 54 complete template packages.
+
+ACTUAL RUNTIME SHORTLIST RESULTS
+                             Right reference in first 3    Any suggestion offered
+Correct load tags supplied:  37/54 (68.5%)                 46/54
+No load tags supplied:       22/54 (40.7%)                 51/54
+A hit means at least one reference photo for that load/purpose was among the first
+three suggestions. It does not mean the top suggestion was correct. Suggestions
+for a different load are failures even when their purpose matches. The load-tagged
+condition is conditional on correct human grouping, not an automatic load result.
+Any suggestion offered does not mean the offered photos were correct.
+
+Standalone classification of the 60 slot photos was 24/60 top-1 and 48/60 top-3.
+These are purpose labels only; they do not establish load identity. Similarity and
+softmax scores are ranking signals, not calibrated correctness probabilities.
+A weak yellow tape-line orientation cue improves ranking of some measurement
+photos; it does not read markings, endpoints, units or dimensions. It is only a
+bonus, so a white tape is not rejected on color alone.
+
+Experiments using letterboxed full images or combined center/full features did
+not improve load-tagged retrieval and are not included. The shipped head reuses
+the existing cached center-crop features.
+
+LIMITATIONS
+No shortlist result is established here for calculator screenshots, disposal,
+first-10 evidence or property Before/During/After. Both full-view boxes have not
+been independently validated. Duplicate checks prevent using identical full-view
+copies, but cannot prove distinct useful camera angles. Exact fullness, handwritten
+cards and tape endpoints remain unreliable. No new-vendor generalization, end-user
+speed improvement, Windows OCR accuracy or Windows executable validation is claimed.
+The required next accuracy step is new vendor cases with independently checked
+load/purpose labels and timed comparison against the current manual workflow.
+
+BEHAVIOR CHECKS
+171 targeted software checks passed: 123 core + 48 Tk desktop workflow checks.
+They cover explicit one-box selection, automatic navigation, preserving existing
+choices, source changes, other-load exclusions, duplicate full views, financial-
+document exclusion, scoped OCR, smaller-window controls and saved-project path
+rebasing. These tests are separate from the photo recognition results above.
+
+The historical reports below describe earlier versions; they are not cumulative
+accuracy guarantees or a substitute for the current limitations.
+
+HISTORICAL CLASSIFIER REPORT - read with this update
+The classifier is unchanged in v28. A later untouched raw folder scored only
+125/235 exact broad-category matches (53.2%), with 105 unresolved and five
+category disagreements against assistant visual reference labels. The older
+curated-package results below are not a general accuracy guarantee.
+
+V26 SORTING ACCURACY AND LIMITATIONS - November 2, 2026
+
+OUTCOME
+Broad category suggestions improved substantially on two previously unseen
+properties. All sorting is NOT solved. Before/During/After and reused-container
+load matching remain material limitations. The stage and load experiments were
+not enabled in this release.
+
+METHOD
+Development: the original four package datasets (221 labeled photo/document
+inputs, excluding ten calculator screenshots). A compact logistic classifier was
+trained on normalized features from the existing CLIP CPU image model. The image
+model itself was not changed. Training requires sklearn only in development;
+the shipped app computes the linear head with NumPy, already installed.
+Exploration on the four development properties held out one complete property
+at a time, not random photos. C=.1 achieved 209/221 forced correct categories.
+C=10 with a .7 score cutoff was chosen for useful suggestion coverage from the
+development runs (177 suggestions, 172 correct across those folds). These runs
+were used to choose the method and are not an independent accuracy claim.
+
+Independent category validation: properties 093-604382 and 387-092716, not used
+for category training or selection of C=10 / threshold .7. 181 inputs including
+six calculator screenshots. The main score excludes those six. Reference labels
+come from package sections and visual contact-sheet inspection. These labels
+have not been re-audited by a second human. A container can fill a measurement
+photo too; classification purposes are not always mutually exclusive.
+Embedded image crops respect PDF rotation and exclude section headings. The
+classifier receives pixels, not filenames, section names, dates or case numbers.
+The actual v26 runtime re-ran the images and reproduced the feature-based test.
+
+INDEPENDENT CATEGORY RESULTS
+                           Total    Suggested    Correct Suggestions
+Property Photos              117          113                    113
+Container Photos              36           21                     20
+Measurement Photos            18           18                     18
+Invoice/Bid Document Pages      4            4                      4
+TOTAL                        175          156                    155
+
+155/156 suggestions correct (99.4% selective precision).
+156/175 inputs received a suggestion (89.1% coverage).
+155/175 inputs correctly categorized overall (88.6%).
+19 inputs unresolved and one wrongly categorized: an empty trailer photo was
+suggested as a measurement photo. The v25 baseline got 116/175 correct on this
+same independent set (66.3%, with its own abstentions). Neither percentage is
+a guarantee for a full raw vendor folder or a future property/vendor.
+No accurate invoice-versus-bid distinction or dollar extraction is established
+by the four document examples. It tests the broad Documents category only.
+
+FURTHER EXPERIMENTS - NOT SHIPPED
+A binary Before/After classifier trained on the four original properties got
+101/117 correct when forced to classify property photos from the two new cases.
+An exploratory .95 cutoff kept 64 suggestions with 63 correct. This cutoff was
+examined on those cases and is not independently validated. The model had no
+During examples and would still be capable of mistaking During for Before or
+After. It was rejected for release.
+A separate per-case load classifier used two confirmed examples per load across
+six cases. Forced results were only about 55-59% correct in the tested settings.
+One setting gave 12 correct suggestions out of 12 high-scoring cases but left
+44/56 unresolved. The method/threshold was not independently validated. It was
+rejected for release. Existing conservative load-example suggestions remain.
+Dates and container appearance do not establish load identity; reused containers
+and reused source images create ambiguity which a photo alone cannot resolve.
+
+NEGATIVE / ROBUSTNESS CHECKS
+The first category candidate incorrectly called uniform black and white inputs
+Documents. Added a low-detail blank-image guard; all five synthetic negative
+inputs (white, black, red, noise, simple colored shape) then remained Unclear.
+Two of four app-UI screenshots still received Documents suggestions. This head
+has only four trained classes and lacks robust out-of-domain detection. Broad
+accuracy cannot be extrapolated to arbitrary non-work images.
+109 source/UI/export regression checks passed, including cached-feature upgrades
+without new model inference, blank-cache handling, project persistence, original
+preservation, batch review and PDF export. These are software checks, not model
+accuracy observations. No new Windows executable was built on this Linux host.
+
+STORAGE / PRIVACY
+The compact category head source is roughly 25 KB. It reuses the existing 89-MB
+model and CPU runtime; no additional large model or training library is required.
+Valid v25 cached features can be reclassified without rerunning the image model.
+Source photos, source PDFs, image embeddings and case identifiers are excluded
+from this update ZIP. This report lists case identifiers for test provenance only.
+No source photos were sent to an external inference service.
+
+WHAT IS NEEDED NEXT
+An untouched vendor import from a new property, including confirmed During
+examples and known load relationships, is needed to develop and independently
+test stage/load sorting and measure actual review-time savings. More tuning on
+these six already examined properties is not independent validation. Completed
+packages are curated and compressed, not representative of thousands of raw
+photos, near duplicates, failed shots or unrelated attachments. The tests cannot
+establish universal or production-ready sorting accuracy.
+
+V29: Template measurement selection rules changed only. Classifier unchanged.
+No new photo-sorting accuracy result is claimed.
+
+V30: Source classifier unchanged. Added explicit Find Similar Photos retrieval,
+using existing SHA-validated cached vectors with cosine threshold 0.80. Suggestions
+are ranked related views only, never stages/load assignments. Four development
+anchors in the previously examined 235-photo raw case returned 22 property views,
+9 container views, 1 measurement (itself), and 2 document views. No independent
+photo-classification accuracy improvement or complete sorting claim is made.
+Invoice extraction was checked against the approved example's printed 73.24 CYD,
+$45.00 rate, $450.00 deduction and $2,845.80 total, plus ambiguity/malformed input
+checks. This is not an accuracy benchmark across invoice vendors or layouts.
+
+V31: Same classifier and OCR engine. Added explicit L/W/H-with-units text parsing
+and source/conflict protections, removed filename evidence from photo suggestions.
+Eight previously examined raw photos were read with local Tesseract: three load
+cards, three tape views, and two wider scenes. 0/3 handwritten cards produced usable
+dimensions, 0/3 tape views produced usable dimensions, and 2/3 card load numbers were
+read. Yellow-card crop experiments did not establish dependable dimension reading
+and were not shipped. This is a small development check, not an independent accuracy
+benchmark. Windows OCR was not evaluated here. Parser/software tests passing do
+not establish handwriting accuracy. No larger model or additional download added.
+
+V32 CASE CATEGORY REFINEMENT
+No base classifier retraining or new model weights. Current-case reviewed examples
+supplement unclear categories at cosine >=0.80 with a >=0.04 competing-class margin;
+at least two example types are needed. Strong disagreements with an existing
+category are flagged, not silently replaced. No automatic stage/load/evidence changes.
+
+Raw-folder development check: 17 reference examples, 218 other photos evaluated.
+Reference matches 114 -> 151; unclear 99 -> 62; reference mismatches stayed 5.
+All 37 added proposals matched references (29 property, 7 container, 1 document).
+Two previously examined property sets with 11 reference examples each added 7
+reference-matching proposals and flagged 2 disagreements; one of the disagreements
+had previously matched the reference. Their evaluated subsets contained 61 and 92
+photos, excluding the examples. This is development evidence using known reference
+categories, not independent human-verified accuracy or a time-savings benchmark.
+No untouched new vendor folder was used. Incorrect user examples can degrade results.
+Handwritten cards, tape endpoints and automatic work-stage/load accuracy are unchanged.

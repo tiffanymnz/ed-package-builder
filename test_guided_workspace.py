@@ -19,8 +19,8 @@ class GuidedWorkspaceTests(unittest.TestCase):
         self.app.case = make_case('TEST-001', 'Test property', 'Test vendor', 1, 35)
         self.app.case_dir = Path(self.temp.name)
         self.app.case['loads'][0].update(length_ft=12, width_ft=6, side_height_ft=5)
-        self.app.case.update(verified_first_10_amount='300', invoice_quantity_cyd='13.33',
-            invoice_amount_usd='166.55', invoice_deduction_usd='300',
+        self.app.case.update(verified_first_10_amount='350', invoice_quantity_cyd='13.33',
+            invoice_amount_usd='116.55', invoice_deduction_usd='350',
             invoice_quantity_basis='includes', invoice_deduction_status='yes',
             first_10_prior_work='no', financial_confirmation_note='Synthetic invoice')
         self.app.refresh()
@@ -44,7 +44,7 @@ class GuidedWorkspaceTests(unittest.TestCase):
 
     def test_existing_deduction_and_missing_deduction(self):
         qty, gross, deduction, issues = self.app.evaluate()
-        self.assertAlmostEqual(gross-deduction, 166.55)
+        self.assertAlmostEqual(gross-deduction, 116.55)
         self.assertFalse([issue for issue in issues if self.app.issue_step(issue) == 2])
         for key, value in [('invoice_amount_usd', '466.67'), ('invoice_deduction_usd', '0'), ('invoice_deduction_status', 'no')]:
             self.app.vars[key].set(value)

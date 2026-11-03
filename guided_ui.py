@@ -22,21 +22,21 @@ SLOT_LABELS = {
     'three_quarters': 'Three quarters full', 'full_1': 'Full container · view 1',
     'full_2': 'Full container · view 2', 'receipt': 'Dump receipt',
     'disposal_photo': 'Unloading / disposal', 'first_10_proof': 'First 10 CYD evidence',
-    'measurement_extra_1': 'Extra measurement · view 1',
-    'measurement_extra_2': 'Extra measurement · view 2',
-    'measurement_extra_3': 'Extra measurement · view 3',
+    'measurement_extra_1': 'Supporting Measurement 1 (Optional)',
+    'measurement_extra_2': 'Supporting Measurement 2 (Optional)',
+    'measurement_extra_3': 'Supporting Measurement 3 (Optional)',
     'before_photos': 'Property · before work', 'during_photos': 'Property · during work',
     'after_photos': 'Property · after work', 'financial_pdfs': 'Invoice / financial PDF',
 }
 STEPS = [('Case & loads', 'Property details and measurements'),
          ('Photos & files', 'Connect evidence to each load'),
-         ('Invoice', 'Check the invoice and $300 allowance'),
+         ('Invoice', 'Check the invoice and calculated first-10-CYD deduction'),
          ('Review & Export', 'Resolve issues and create a draft')]
 
 class GuidedApp(App):
     def __init__(self, root):
         self.root = root
-        root.title('ED Package Builder · Guided workspace v18')
+        root.title('ED Package Builder')
         root.geometry('1180x800')
         root.minsize(900, 640)
         root.configure(bg=BG)
@@ -79,14 +79,14 @@ class GuidedApp(App):
         side.pack(side='left', fill='y')
         side.pack_propagate(False)
         tk.Label(side, text='ED Package\nBuilder', bg=INK, fg='white', font=(self.ui_font, 17, 'bold'), justify='left').pack(anchor='w', padx=22, pady=(30, 8))
-        tk.Label(side, text='GUIDED WORKSPACE', bg=INK, fg='#8da7c1', font=(self.ui_font, 9)).pack(anchor='w', padx=22, pady=(0, 30))
+        tk.Label(side, text='CASE FILES', bg=INK, fg='#8da7c1', font=(self.ui_font, 9)).pack(anchor='w', padx=22, pady=(0, 30))
         for i, (title, _) in enumerate(STEPS):
             button = tk.Button(side, text=f'{i+1}    {title}', command=lambda j=i: self.go(j),
                                bg=INK, fg='#d3deeb', activebackground='#25435e', activeforeground='white',
                                bd=0, highlightthickness=0, anchor='w', padx=19, pady=16, font=(self.ui_font, 11), cursor='hand2', wraplength=180)
             button.pack(fill='x', padx=8, pady=3)
             self.step_buttons.append(button)
-        tk.Label(side, text='Drafts require human review.\nNo automatic COR approval.', bg=INK, fg='#9db0c5',
+        tk.Label(side, text='Files are saved locally.', bg=INK, fg='#9db0c5',
                  justify='left', font=(self.ui_font, 9), wraplength=165).pack(side='bottom', padx=20, pady=24)
         workspace = ttk.Frame(root)
         workspace.pack(side='left', fill='both', expand=True)
@@ -203,7 +203,7 @@ class GuidedApp(App):
             ttk.Label(row, text=label, width=26).pack(side='left')
             entry = ttk.Entry(row, width=24); entry.insert(0, default); entry.pack(side='left', fill='x', expand=True)
             entries[key] = entry
-        ttk.Label(body, text='First 10 CYD allowance: $300.00. Confirm Invoice Treatment in step 3.', wraplength=440, style='Muted.TLabel').pack(anchor='w', pady=18)
+        ttk.Label(body, text='The first 10 CYD are deducted at the HUD request rate. Confirm Invoice Treatment in step 3.', wraplength=440, style='Muted.TLabel').pack(anchor='w', pady=18)
         def create():
             try:
                 number = entries['case_number'].get().strip()
@@ -216,7 +216,7 @@ class GuidedApp(App):
                 directory = BASE/safe(number)
                 if (directory/'case.json').exists(): raise ValueError('This case already exists. Use Open.')
                 self.case = make_case(number, entries['address'].get(), entries['vendor'].get(), count, rate)
-                self.case['verified_first_10_amount'] = '300'
+                self.case['verified_first_10_amount'] = ''
                 self.case_dir = directory; self.vars = {}; self.save(); self.refresh(); self.go(0); win.destroy()
             except Exception as exc: messagebox.showerror('Check case details', str(exc), parent=win)
         ttk.Button(body, text='Create case', style='Primary.TButton', command=create).pack(anchor='e', pady=10)
@@ -293,11 +293,11 @@ class GuidedApp(App):
                 self.field(extras, label, f'L:{i}:{key}', load.get(key, ''), j, 0)
             if as_number(load.get('overage_height_ft')) or as_number(load.get('overage_cyd')): toggle_extra()
             ttk.Separator(card).pack(fill='x', pady=12)
-            ttk.Label(card, text='CalculatorSoup screenshot', style='Section.TLabel').pack(anchor='w')
+            ttk.Label(card, text='cubic yard calculation', style='Section.TLabel').pack(anchor='w')
             label = ttk.Label(card, text='', style='Card.TLabel', wraplength=600)
             label.pack(anchor='w', pady=8); self.screenshot_labels.append(label)
             row = ttk.Frame(card, style='Card.TFrame'); row.pack(fill='x')
-            ttk.Button(row, text='1  Open CalculatorSoup', command=lambda n=i: self.calculator_help(n)).pack(side='left', padx=(0, 8))
+            ttk.Button(row, text='1  Open Cubic Yard Calculation', command=lambda n=i: self.calculator_help(n)).pack(side='left', padx=(0, 8))
             ttk.Button(row, text='2  Attach screenshot', command=lambda n=i: self.attach_calculator(n)).pack(side='left')
         ttk.Button(content, text='+ Add another load', command=self.add_load).pack(anchor='w', pady=(0, 14))
         for key, variable in self.vars.items():
@@ -323,22 +323,22 @@ class GuidedApp(App):
                         f"Length: {result['length']:g} ft\nWidth: {result['width']:g} ft\n"
                         f"Depth / height: {result['height']*float(self.case['loads'][index].get('fill_fraction',1))+result['over_height']:g} ft\nQuantity: 1\n"
                         f"Container plus uniform overage: {result['total'] if not as_number(self.case['loads'][index].get('overage_cyd')) else result['container']:.2f} CYD\n\n"
-                        'Click Calculate. Capture the CalculatorSoup name, inputs, units and answer using Windows + Shift + S. '
+                        'Click Calculate. Capture the Cubic Yard Calculation name, inputs, units and answer using Windows + Shift + S. '
                         'Save the screenshot as a PNG, then click Attach screenshot. No property or vendor information is sent by this app.')
         if as_number(self.case['loads'][index].get('overage_cyd')):
             instructions += '\n\nSeparate overage needs its own documented calculation. Include all results in your screenshot; do not change the container height to invent overage geometry.'
         webbrowser.open(URL)
-        messagebox.showinfo('Capture the actual CalculatorSoup result', instructions)
+        messagebox.showinfo('Capture the actual Cubic Yard Calculation result', instructions)
 
     def attach_calculator(self, index):
         self.save(); load = self.case['loads'][index]
         try: result = volume(load)
         except Exception as exc: messagebox.showwarning('Enter measurements first', str(exc)); return
-        path = filedialog.askopenfilename(title='Select the actual CalculatorSoup screenshot', filetypes=[('Screenshot', '*.png *.jpg *.jpeg')])
+        path = filedialog.askopenfilename(title='Select the actual cubic yard calculation', filetypes=[('Screenshot', '*.png *.jpg *.jpeg')])
         if not path: return
         try:
             with Image.open(path) as image: image.verify()
-            win = tk.Toplevel(self.root); win.title(f'Review CalculatorSoup screenshot · Load {index+1}')
+            win = tk.Toplevel(self.root); win.title(f'Review cubic yard calculation · Load {index+1}')
             win.geometry('780x590'); win.transient(self.root); win.grab_set()
             body = ttk.Frame(win, padding=20); body.pack(fill='both', expand=True)
             ttk.Label(body, text='Check the screenshot before attaching', font=(self.ui_font, 16, 'bold')).pack(anchor='w')
@@ -347,11 +347,11 @@ class GuidedApp(App):
             preview = ImageTk.PhotoImage(image)
             label = ttk.Label(body, image=preview); label.image = preview; label.pack(expand=True)
             checked = tk.BooleanVar(value=False)
-            ttk.Checkbutton(body, variable=checked, text='Actual CalculatorSoup screenshot; inputs, units and result match this load.').pack(anchor='w', pady=14)
+            ttk.Checkbutton(body, variable=checked, text='Actual cubic yard calculation; inputs, units and result match this load.').pack(anchor='w', pady=14)
             def attach():
                 if not checked.get(): messagebox.showwarning('Review required', 'Check the confirmation after reviewing the image.', parent=win); return
                 folder = self.case_dir/'originals'; folder.mkdir(exist_ok=True)
-                digest = file_digest(path); target = folder/(digest[:12]+'_CalculatorSoup'+Path(path).suffix.lower())
+                digest = file_digest(path); target = folder/(digest[:12]+'_Cubic Yard Calculation'+Path(path).suffix.lower())
                 import shutil
                 if Path(path).resolve() != target.resolve(): shutil.copy2(path, target)
                 load['calculator_evidence'] = dict(path=str(target), sha256=digest, source_url=URL,
@@ -473,18 +473,21 @@ class GuidedApp(App):
                     n = int(key[-1])-1
                     path = load.get('extra_measurement_slots', {}).get(key) if load.get('extra_measurement_slots') else (extras[n] if len(extras)>n else None)
                 else: path = load.get('photos', {}).get(key)
-                status = 'Added' if path and Path(path).is_file() else 'Missing'
+                status = 'Added' if path and Path(path).is_file() else ('Optional' if key.startswith('measurement_extra_') else 'Missing')
             tree.insert('', 'end', iid=key, text=label, values=(status,))
 
     def draw_finance(self):
         if not self.case: self.empty(self.finance_tab); return
         content = self.scroll_page(self.finance_tab)
-        self.card(content, 'First 10 CYD = $300.00', 'The $300 allowance is fixed. Enter what the invoice actually shows. An existing deduction is never applied twice.')
+        self.card(content, 'First 10 CYD at the Request Rate', 'The HUD deduction is calculated from cubic yards and rate. Separate vendor bookkeeping credits are not used.')
         card = self.card(content, 'Invoice Figures')
         grid = ttk.Frame(card, style='Card.TFrame'); grid.pack(fill='x')
-        for i, (label, key) in enumerate([('Quantity billed (CYD)', 'invoice_quantity_cyd'), ('Net invoice amount ($)', 'invoice_amount_usd'), ('Deduction shown on invoice ($)', 'invoice_deduction_usd'), ('Verified allowance ($)', 'verified_first_10_amount')]):
-            self.field(grid, label, key, self.case.get(key, '300' if key == 'verified_first_10_amount' else ''), i//2, i%2)
-        card = self.card(content, 'Allowance Treatment')
+        for i, (label, key) in enumerate([('Quantity billed (CYD)', 'invoice_quantity_cyd'), ('Net invoice amount ($)', 'invoice_amount_usd'), ('Deduction shown on invoice ($)', 'invoice_deduction_usd')]):
+            self.field(grid, label, key, self.case.get(key, ''), i//2, i%2)
+        self.vars['verified_first_10_amount']=tk.StringVar(value='')
+        ttk.Label(grid,text='Calculated HUD Deduction ($)').grid(row=2,column=0,sticky='w',pady=8)
+        ttk.Label(grid,textvariable=self.vars['verified_first_10_amount']).grid(row=2,column=1,sticky='w')
+        card = self.card(content, 'Invoice Treatment')
         options = [('Does the invoice quantity include the first 10 CYD?', 'invoice_quantity_basis',
                     [('Choose an answer', 'unknown'), ('Yes · full measured quantity', 'includes'), ('No · first 10 CYD excluded', 'excludes')]),
                    ('Is a deduction already shown on this invoice?', 'invoice_deduction_status',
@@ -510,41 +513,49 @@ class GuidedApp(App):
         self.show_checks()
 
     def evaluate(self):
+        self.sync_case()
+        from cor_package import totals
+        try:amount=str(totals(self.case)['allowance'])
+        except (ValueError,KeyError):amount=''
+        self.case['verified_first_10_amount']=amount
+        self.case['first_10_prior_work']='no'
+        if 'verified_first_10_amount' in self.vars and self.vars['verified_first_10_amount'].get()!=amount:self.vars['verified_first_10_amount'].set(amount)
+        if 'first_10_prior_work' in self.vars:self.vars['first_10_prior_work'].set('no')
         qty, gross, ded, issues = super().evaluate()
         # Missing-slot findings are already reported per load above. Preserve all other audit findings.
         issues = [issue for issue in issues if not re.match(r'BLOCKING / Source audit: Missing (height|width|length|empty|quarter|half|three_quarters|full_1|full_2|receipt|disposal/unloading image)$', issue)]
+        issues = [issue for issue in issues if 'Field Guide supplemental measurement views not fully linked (template remains unchanged)' not in issue]
         for i, load in enumerate(self.case['loads'], 1):
             _, problem = screenshot_status(load)
             if problem: issues.append(f'BLOCKING / Load {i} calculator: {problem}')
-        if not abs(as_number(self.case.get('verified_first_10_amount'), -1)-300) <= .01:
-            issues.append('BLOCKING / The first-10-CYD allowance must be the fixed $300.00.')
         return qty, gross, ded, issues
 
     def confirm_financial_rule(self):
         self.sync_case()
-        if not abs(as_number(self.case.get('verified_first_10_amount'), -1)-300) <= .01:
-            messagebox.showerror('Fixed allowance', 'The first 10 CYD allowance is $300.00. Correct the verified allowance before confirming.'); return
+        from cor_package import totals
+        try:self.vars['verified_first_10_amount'].set(str(totals(self.case)['allowance']))
+        except (ValueError,KeyError):
+            messagebox.showerror('Check Measurements','Confirm the measurements and request rate first.');return
         super().confirm_financial_rule()
 
     def show_checks(self):
         if not self.case: return []
         qty, gross, ded, issues = self.evaluate()
         net = 'Needs confirmation' if ded is None else f'${gross-ded:,.2f}'
-        summary = f'Measured: {qty:.2f} CYD     Gross: ${gross:,.2f}\nExpected payable: {net}  ·  subject to invoice reconciliation'
+        summary = f'Measured: {qty:.2f} CYD     Gross: ${gross:,.2f}\nHUD Request: {net}'
         if hasattr(self, 'finance_summary') and self.finance_summary.winfo_exists():
             finance = [x.split(' / ', 1)[-1] for x in issues if self.issue_step(x) == 2]
-            self.finance_summary.configure(text=summary+'\n\n'+('\n'.join(finance) if finance else 'Invoice Checks agree. Human review is still required.'))
+            self.finance_summary.configure(text=summary+'\n\n'+('\n'.join(finance) if finance else 'Invoice figures agree.'))
         if hasattr(self, 'review_tree') and self.review_tree.winfo_exists():
             tree = self.review_tree; tree.delete(*tree.get_children())
             self.issue_routes = {}
             self.review_summary.configure(text=summary)
             blocking = sum(x.startswith('BLOCKING') for x in issues)
-            self.review_count.configure(text=f'{blocking} items to resolve · {len(issues)-blocking} items to review' if issues else 'Checklist complete · final human review required')
+            self.review_count.configure(text=f'{blocking} items to resolve · {len(issues)-blocking} items to review' if issues else 'All checks complete')
             for i, issue in enumerate(issues):
                 route = self.issue_step(issue)
                 text = issue.split(' / ', 1)[-1]
                 for raw, human in SLOT_LABELS.items(): text = text.replace('image '+raw, 'photo: '+human)
-                text = text.replace('Field Guide supplemental measurement views not fully linked (template remains unchanged)', 'Add the 3 supplemental measurement photos required by the guide.')
                 text = text.replace('First 10 CYD progression/remaining debris evidence unlinked', 'Assign first-10-CYD evidence in Photos & files.')
                 text = text.replace('Missing property before and/or after photo selections', 'Assign property before-work and after-work photos.')
                 ident = str(i); self.issue_routes[ident] = route
@@ -596,8 +607,8 @@ class GuidedApp(App):
 
     def help(self):
         messagebox.showinfo('Four steps to a package',
-            '1. CASE & LOADS\nEnter measurements and attach a real CalculatorSoup screenshot for each load.\n\n'
+            '1. CASE & LOADS\nEnter measurements and attach a real cubic yard calculation for each load.\n\n'
             '2. PHOTOS & FILES\nImport a folder or ZIP. Select a file, choose its purpose and assign it.\n\n'
-            '3. INVOICE\nCopy the invoice figures and confirm how the fixed $300 allowance was handled.\n\n'
+            '3. INVOICE\nCopy the invoice figures and confirm how the calculated first-10-CYD deduction was handled.\n\n'
             '4. REVIEW & EXPORT\nSelect an issue to return to the right step. Generate a Word draft and use Open output folder.\n\n'
             'Changes save when moving between steps and closing the app. Ctrl+S saves at any time. Advanced tools are under More.')
