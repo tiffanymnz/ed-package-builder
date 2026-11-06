@@ -128,3 +128,20 @@ class WorkflowUiUpgradeTests(unittest.TestCase):
    for child in parent.winfo_children():yield child;yield from widgets(child)
   buttons=[w for w in widgets(win) if isinstance(w,ttk.Button) and w['text']=='Use This Version'];self.assertEqual(len(buttons),2);buttons[1].invoke();self.root.update()
   self.assertEqual([d['role'] for d in self.app.case['package_documents']],['exclude','invoice']);self.assertTrue(all(Path(p).exists() for p in paths))
+
+class WindowSizingTests(unittest.TestCase):
+ def test_review_window_reserves_space_for_taskbar_and_title_bar(self):
+  from ui_windows import fit_window
+  from unittest.mock import Mock,patch
+  win=Mock()
+  with patch('ui_windows.work_area',return_value=(0,0,1024,728)),patch('ui_windows.sys.platform','linux'):
+   fit_window(win,win,(1120,820),(900,600))
+  self.assertEqual(win.geometry.call_args.args[0],'992x668+16+12')
+  self.assertLess(12+668+30,728)
+ def test_small_screen_does_not_keep_an_impossible_minimum_size(self):
+  from ui_windows import fit_window
+  from unittest.mock import Mock,patch
+  win=Mock()
+  with patch('ui_windows.work_area',return_value=(0,0,800,600)),patch('ui_windows.sys.platform','linux'):
+   fit_window(win,win,(1120,820),(900,640))
+  win.minsize.assert_called_once_with(768,540)

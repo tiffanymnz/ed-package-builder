@@ -1,3 +1,4 @@
+from ui_windows import fit_window
 """Fast source-checked card review before bulk photo organization."""
 import tkinter as tk
 from tkinter import ttk,messagebox
@@ -7,7 +8,7 @@ from photo_inspector import PhotoPane
 class CardReviewWindow:
     def __init__(self,app):
         self.app=app;self.case=app.case;self.rows=[];self.preview=None;self.shown_key=None;self.closed=False;app._load_card_review=self
-        self.win=tk.Toplevel(app.root);self.win.title('Review Load Cards');self.win.geometry(f'{max(850,min(1080,app.root.winfo_screenwidth()-40))}x{max(620,min(780,app.root.winfo_screenheight()-60))}');self.win.minsize(850,620);self.win.transient(app.root);self.win.configure(background=app.root.cget('bg'))
+        self.win=tk.Toplevel(app.root);self.win.title('Review Load Cards');self.win.geometry(f'{max(850,min(1080,app.root.winfo_screenwidth()-40))}x{max(620,min(780,app.root.winfo_screenheight()-60))}');self.win.minsize(850,620);self.win.transient(app.root);fit_window(self.win,app.root,(1080,780),(850,600));self.win.configure(background=app.root.cget('bg'))
         body=ttk.Frame(self.win,padding=18);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Review Load Cards',font=(app.ui_font,21,'bold')).pack(anchor='w')
         ttk.Label(body,text='Check the number on the card, then choose its load in this package. Vendor numbering may differ from package numbering.',wraplength=970).pack(anchor='w',pady=(6,12))

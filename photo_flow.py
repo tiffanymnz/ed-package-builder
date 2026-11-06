@@ -1,3 +1,4 @@
+from ui_windows import fit_window
 """Batch photo organization with background local analysis and explicit evidence choices."""
 import copy
 from pathlib import Path
@@ -209,7 +210,7 @@ class PhotoFlowWindow:
     PAGE_SIZE=6
     def __init__(self,app):
         self.app=app;self.case=app.case;self.rows=[];self.checked={};self.visible=[];self.selected=set();self.images=[];self.page=0;self.closed=False;self.loading=False;self.dirty=True;self.related=None;self.results=queue.Queue();self.job=None;self.last_action=None;self.resize_job=None
-        self.win=tk.Toplevel(app.root);self.win.title('Organize Photos');self.win.geometry(f'{max(900,min(1120,app.root.winfo_screenwidth()-40))}x{max(650,min(820,app.root.winfo_screenheight()-60))}');self.win.minsize(900,650);self.win.transient(app.root)
+        self.win=tk.Toplevel(app.root);self.win.title('Organize Photos');self.win.geometry(f'{max(900,min(1120,app.root.winfo_screenwidth()-40))}x{max(650,min(820,app.root.winfo_screenheight()-60))}');self.win.minsize(900,650);self.win.transient(app.root);fit_window(self.win,app.root,(1120,820),(900,600))
         body=ttk.Frame(self.win,padding=18);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Organize Photos',font=(app.ui_font,22,'bold')).pack(anchor='w')
         ttk.Label(body,text='Choose a photo group or filter, then select photos to assign. The same container can appear in several loads.',wraplength=1000).pack(anchor='w',pady=(5,12))

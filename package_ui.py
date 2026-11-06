@@ -1,3 +1,4 @@
+from ui_windows import fit_window
 """Import-first user workflow for a complete ED COR package."""
 import hashlib
 import json
@@ -31,7 +32,7 @@ class PackageApp(GuidedApp):
         self.scan_cancel=threading.Event()
         self.scan_running = False
         super().__init__(root)
-        root.title('ED Package Builder')
+        root.title('ED Package Builder');fit_window(root,root,(1180,800),(900,640))
         self.status.set('Create a case with its case number and vendor, then import your files.')
         def add_load_text_tool(widget):
             if isinstance(widget,ttk.Menubutton):

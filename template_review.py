@@ -1,3 +1,4 @@
+from ui_windows import fit_window
 """Template-first photo shortlists. All evidence choices remain explicit."""
 import copy
 import hashlib
@@ -267,7 +268,7 @@ class TemplateReviewWindow:
         self.app=app;self.case=app.case;self.index=None;self.page=0;self.images=[];self.closed=False;self.results=queue.Queue();self.poll_job=None;self.resize_job=None
         self.win=tk.Toplevel(app.root);self.win.title('Review Suggested Photos')
         ttk.Style(self.win).configure('PhotoAction.TButton',padding=(4,3))
-        self.win.geometry(f'{max(900,min(1100,app.root.winfo_screenwidth()-40))}x{max(600,min(800,app.root.winfo_screenheight()-80))}');self.win.minsize(900,600);self.win.transient(app.root)
+        self.win.geometry(f'{max(900,min(1100,app.root.winfo_screenwidth()-40))}x{max(600,min(800,app.root.winfo_screenheight()-80))}');self.win.minsize(900,600);self.win.transient(app.root);fit_window(self.win,app.root,(1100,800),(900,600))
         body=ttk.Frame(self.win,padding=18);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Fill the Template',font=(app.ui_font,20,'bold')).pack(anchor='w')
         ttk.Label(body,text='1. Choose the load and a box on the left.  2. Check the suggested photos.  3. Select Use This Photo to save and continue.',wraplength=850).pack(anchor='w',pady=(5,12))

@@ -1,3 +1,4 @@
+from ui_windows import fit_window
 """In-app inspection without losing the parent review selection or position."""
 from pathlib import Path
 import tkinter as tk
@@ -83,7 +84,7 @@ class PhotoPane(ttk.Frame):
 def inspect_photos(parent,paths,title='Inspect Photos'):
     paths=list(dict.fromkeys(str(p) for p in paths if p))
     if not paths:return None
-    win=tk.Toplevel(parent);win.configure(background=parent.cget('background') if 'background' in parent.keys() else '#f2f5f8');win.title(title);win.geometry(f'{max(700,min(1180,parent.winfo_screenwidth()-40))}x{max(500,min(800,parent.winfo_screenheight()-60))}');win.minsize(700,500);win.transient(parent)
+    win=tk.Toplevel(parent);win.configure(background=parent.cget('background') if 'background' in parent.keys() else '#f2f5f8');win.title(title);win.geometry(f'{max(700,min(1180,parent.winfo_screenwidth()-40))}x{max(500,min(800,parent.winfo_screenheight()-60))}');win.minsize(700,500);win.transient(parent);fit_window(win,parent,(1180,800),(700,500))
     ttk.Label(win,text='Inspect the load, tape endpoints and readability. Zoom and rotation affect this preview only.',wraplength=1100).pack(anchor='w',padx=16,pady=12)
     content=ttk.Panedwindow(win,orient='horizontal');content.pack(fill='both',expand=True,padx=12,pady=(0,12))
     for path in paths[:2]:content.add(PhotoPane(content,path),weight=1)

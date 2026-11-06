@@ -12,7 +12,8 @@ def run(report_path):
             root=tk.Tk();errors=[];root.report_callback_exception=lambda *args:errors.append(str(args[1]))
             app=PackageApp(root);app.start_photo_work=lambda:None
             app.case=make_case('UI-SMOKE','','Synthetic Test Vendor',1,35);app.case_dir=Path(folder)
-            app.refresh();root.geometry('1000x740');root.update();titles=[]
+            app.refresh();from ui_windows import fit_window,work_area
+            fit_window(root,root,(1000,740),(900,600));root.update();titles=[]
             def capture(name,window):
                 if sys.platform!='win32':return
                 try:
@@ -47,6 +48,9 @@ def run(report_path):
                 assert window.undo_button.winfo_ismapped(),'Batch undo action is hidden'
                 densities.append(int(size));capture('review-'+size,window.win)
             assert window.apply_button.winfo_rooty()+window.apply_button.winfo_height()<=window.win.winfo_rooty()+window.win.winfo_height(),'Review action extends below the window'
+            left,top,right,bottom=work_area(root)
+            assert window.apply_button.winfo_rooty()+window.apply_button.winfo_height()<=bottom-4,'Photo review action is obscured by the taskbar'
+            assert window.apply_button.winfo_rootx()+window.apply_button.winfo_width()<=right,'Photo review action extends beyond the monitor'
             window.close();root.update()
             result['photo_densities']=densities
             assert not errors,'Interface callback failed: '+str(errors)

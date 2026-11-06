@@ -1,3 +1,4 @@
+from ui_windows import fit_window
 """Review a load's stages together; commit explicit choices atomically."""
 import copy
 from pathlib import Path
@@ -75,7 +76,7 @@ class LoadingSequenceWindow:
         self.plan=propose_loading_sequence(self.case,self.index,self.number);self.choices={s:r['candidate'] for s,r in self.plan.items()}
         self.flags={};self.offsets={s:-1 for s,_ in STAGES};self.cleared=set();self.images=[];self.closed=False;self.resize_job=None
         self.win=tk.Toplevel(parent.win);self.win.title(f'Load {self.number} · Loading Sequence');self.win.transient(parent.win)
-        self.win.geometry(f'{min(1120,self.win.winfo_screenwidth()-40)}x{min(820,self.win.winfo_screenheight()-70)}');self.win.minsize(880,620)
+        self.win.geometry(f'{min(1120,self.win.winfo_screenwidth()-40)}x{min(820,self.win.winfo_screenheight()-70)}');self.win.minsize(880,620);fit_window(self.win,parent.win,(1120,820),(880,600))
         body=ttk.Frame(self.win,padding=16);body.pack(fill='both',expand=True)
         ttk.Label(body,text=f'Load {self.number} · Loading Sequence',font=(self.app.ui_font,20,'bold')).pack(anchor='w')
         ttk.Label(body,text='Compare the stages together. Check the photos that show the stated fill level. Leave missing evidence empty.',wraplength=960).pack(anchor='w',pady=(5,10))
@@ -157,7 +158,7 @@ class SequencePhotoPicker:
         import tkinter as tk
         from tkinter import ttk
         self.board=board;self.slot=slot;self.closed=False;self.page=0;self.images=[]
-        self.win=tk.Toplevel(board.win);self.win.title('Choose a Loading Photo');self.win.transient(board.win);self.win.geometry('940x740');self.win.minsize(840,650)
+        self.win=tk.Toplevel(board.win);self.win.title('Choose a Loading Photo');self.win.transient(board.win);self.win.geometry('940x740');self.win.minsize(840,650);fit_window(self.win,board.win,(940,740),(840,600))
         body=ttk.Frame(self.win,padding=14);body.pack(fill='both',expand=True)
         ttk.Label(body,text=board.plan[slot]['label'],font=(board.app.ui_font,18,'bold')).pack(anchor='w')
         ttk.Label(body,text='Compare the alternatives. Select a photo, then check it on the loading sequence.').pack(anchor='w',pady=(4,8))
