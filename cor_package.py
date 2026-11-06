@@ -347,7 +347,9 @@ def comparable_bid_amount(record,quantity):
 
 def validate(case):
     from evidence_audit import loading_photo_conflicts,reviewed_source_conflicts
+    from invoice_review import issues as invoice_issues
     problems = [finding['detail'] for finding in loading_photo_conflicts(case)+reviewed_source_conflicts(case)]
+    problems.extend(invoice_issues(case))
     for i, load in enumerate(case.get('loads',[]),1):
         try: volume(load)
         except Exception as exc: problems.append(f'Load {i}: Measurements need review: {exc}.')

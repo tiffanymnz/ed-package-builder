@@ -20,7 +20,7 @@ def stage_claim(case,path):
     for reading in clue.get('readings',[]):
         if reading.get('incomplete'):continue
         for line in reading.get('text','').splitlines():
-            value=line.strip(' .,:;').lower()
+            value=line.strip(' .,:;').lower().translate(str.maketrans({'¼':'1/4','½':'1/2','¾':'3/4'}))
             for stage,pattern in patterns.items():
                 if re.fullmatch(pattern,value):claims.add(stage)
     from card_fractions import VERSION as FRACTION_VERSION

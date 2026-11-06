@@ -41,6 +41,8 @@ class PackageApp(GuidedApp):
                 menu.add_command(label='Review Load Cards',command=self.review_load_cards)
                 menu.add_command(label='Organize Photos',command=self.organize_photos)
                 menu.add_command(label='Fill Template',command=self.template_photo_review)
+                menu.add_command(label='Recover Interrupted Export',command=self.recover_export)
+                menu.add_command(label='Storage and Performance',command=self.performance_check)
                 advanced=tk.Menu(menu,tearoff=False)
                 advanced.add_command(label='Detailed Photo Review',command=self.visual_photo_review)
                 advanced.add_command(label='Text Suggestions',command=self.review_suggestions)
@@ -575,6 +577,49 @@ class PackageApp(GuidedApp):
         if tool and not tool.closed and tool.case is self.case and tool.win.winfo_exists():
             tool.refresh_tree();tool.render()
 
+    def performance_check(self):
+        if not self.require():return
+        if self.finish_photo_work(self.performance_check):return
+        import copy,queue
+        from workflow_metrics import measure
+        results=queue.Queue();snapshot=copy.deepcopy(self.case);directory=self.case_dir
+        self.status.set('Checking local storage and photo-review performance...')
+        def work():
+            try:results.put((measure(snapshot,directory),None))
+            except Exception as exc:results.put((None,str(exc)))
+        threading.Thread(target=work,daemon=True).start()
+        def poll():
+            try:data,error=results.get_nowait()
+            except queue.Empty:self.root.after(100,poll);return
+            self.status.set('Local performance check complete.' if not error else 'Performance check could not finish.')
+            if error:messagebox.showwarning('Performance Check',error,parent=self.root);return
+            text=f"Photos: {data['photos']} ({data['analyzed_photos']} analyzed)\nReview preparation: {data['cold_seconds']} seconds\nCached preparation: {data['cached_seconds']} seconds\nWorking project: {data['project_mb']} MB\nLocal models: {data['model_mb']} MB\nFree disk: {data['free_disk_mb']} MB\n\n"+data['note']
+            messagebox.showinfo('Storage and Performance',text,parent=self.root)
+        self.root.after(100,poll)
+    def recover_export(self):
+        from export_bundle import recover_bundles
+        folder=filedialog.askdirectory(parent=self.root,title='Choose the Export Folder')
+        if not folder:return
+        try:messagebox.showinfo('Export Recovery',f'{recover_bundles(folder)} interrupted export(s) restored.',parent=self.root)
+        except Exception as exc:messagebox.showerror('Recovery Needs Attention',str(exc),parent=self.root)
+    def choose_invoice_version(self):
+        from invoice_review import use_invoice_version
+        win=tk.Toplevel(self.root);win.title('Choose Final Invoice');win.transient(self.root)
+        ttk.Label(win,text='Open and check the final version. Other invoice versions remain in your project but are excluded from the package.',wraplength=550).pack(padx=18,pady=12)
+        def choose(index):
+            try:
+                use_invoice_version(self.case,index);self.save();win.destroy();self.draw_finance()
+            except Exception as exc:messagebox.showwarning('Invoice Needs Review',str(exc),parent=win)
+        for index,doc in enumerate(self.case.get('package_documents',[])):
+            if doc.get('role')!='invoice':continue
+            line=ttk.Frame(win,padding=8);line.pack(fill='x')
+            ttk.Button(line,text='Open '+doc.get('name',Path(doc['path']).name),command=lambda p=doc['path']:self.open_original(p)).pack(side='left')
+            ttk.Button(line,text='Use This Version',command=lambda i=index:choose(i)).pack(side='right')
+    def keep_invoice_set(self):
+        from invoice_review import confirm_invoice_set
+        if not messagebox.askyesno('Confirm Final Bill','Do these attachments form one final bill, with no replaced versions or duplicate charges? Enter the combined invoice total once.',parent=self.root):return
+        try:confirm_invoice_set(self.case);self.save();self.draw_finance()
+        except Exception as exc:messagebox.showwarning('Invoice Needs Review',str(exc),parent=self.root)
     def draw_finance(self):
         if not self.case:self.empty(self.finance_tab);return
         from cor_package import extract_costs
@@ -594,7 +639,9 @@ class PackageApp(GuidedApp):
         for invoice in invoices:
             ttk.Button(card,text='Open Invoice' if len(invoices)==1 else 'Open Invoice · '+invoice.get('name',Path(invoice['path']).name),command=lambda p=invoice['path']:self.open_original(p)).pack(anchor='w',pady=(0,8))
         if len(invoices)>1:
-            ttk.Label(card,text='Check every invoice attachment. Exclude replaced versions in Import Files. If these files make up one final bill, enter the combined total once.',style='Card.TLabel',wraplength=580).pack(anchor='w',pady=6)
+            ttk.Label(card,text='Choose the final invoice version, or keep all attachments if they make up one final bill.',style='Card.TLabel',wraplength=580).pack(anchor='w',pady=6)
+            ttk.Button(card,text='Choose Final Invoice Version',command=self.choose_invoice_version).pack(anchor='w',pady=4)
+            ttk.Button(card,text='Keep These Attachments as the Final Bill',command=self.keep_invoice_set).pack(anchor='w',pady=4)
         ttk.Label(card,text='Invoice figures found — please check them.' if suggestions else 'Enter any figures the app could not read.',style='Card.TLabel',foreground=MUTED).pack(anchor='w')
         grid=ttk.Frame(card,style='Card.TFrame');grid.pack(fill='x',pady=8)
         for i,(label,key) in enumerate([('Cubic Yards on Invoice','invoice_quantity_cyd'),('Invoice Total ($)','invoice_amount_usd'),('HUD Request Rate ($/CYD)','rate_per_cyd')]):

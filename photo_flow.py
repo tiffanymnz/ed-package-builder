@@ -77,6 +77,10 @@ def build_photo_rows(case,previous=None):
         if example:
             existing=row['stage_proposal']
             row['stage_proposal']=example if not existing or existing['stage']==example['stage'] else None
+    from trip_bounds import review_windows
+    windows=review_windows(case,out)
+    for row in out:
+        if not row.get("proposal"):row["proposal"]=windows.get(row["path"],{})
     return out,rows
 
 class BackgroundPhotoWork:
@@ -204,7 +208,7 @@ class BackgroundPhotoWork:
 class PhotoFlowWindow:
     PAGE_SIZE=6
     def __init__(self,app):
-        self.app=app;self.case=app.case;self.rows=[];self.checked={};self.visible=[];self.selected=set();self.images=[];self.page=0;self.closed=False;self.loading=False;self.dirty=True;self.related=None;self.results=queue.Queue();self.job=None
+        self.app=app;self.case=app.case;self.rows=[];self.checked={};self.visible=[];self.selected=set();self.images=[];self.page=0;self.closed=False;self.loading=False;self.dirty=True;self.related=None;self.results=queue.Queue();self.job=None;self.last_action=None;self.resize_job=None
         self.win=tk.Toplevel(app.root);self.win.title('Organize Photos');self.win.geometry(f'{max(900,min(1120,app.root.winfo_screenwidth()-40))}x{max(650,min(820,app.root.winfo_screenheight()-60))}');self.win.minsize(900,650);self.win.transient(app.root)
         body=ttk.Frame(self.win,padding=18);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Organize Photos',font=(app.ui_font,22,'bold')).pack(anchor='w')
@@ -225,6 +229,8 @@ class PhotoFlowWindow:
         actions=ttk.Frame(body);actions.pack(fill='x',pady=(0,10))
         ttk.Button(filters,text='Review Load Cards',command=self.review_cards).pack(side='left',padx=(0,8))
         ttk.Button(actions,text='Select This Page',command=self.select_page).pack(side='left')
+        ttk.Button(actions,text='Group This Trip',command=self.group_trip).pack(side='left',padx=4)
+        self.undo_button=ttk.Button(actions,text='Undo Last Batch',command=self.undo_batch,state='disabled');self.undo_button.pack(side='left',padx=4)
         more=ttk.Menubutton(actions,text='More');menu=tk.Menu(more,tearoff=False);more.configure(menu=menu);more.pack(side='right')
         menu.add_command(label='Compare Two Selected Photos',command=self.compare_selected)
         menu.add_command(label='Find Related Views',command=self.find_related);menu.add_command(label='Show All Views',command=self.clear_related)
@@ -244,9 +250,45 @@ class PhotoFlowWindow:
         content=ttk.Frame(body);content.pack(fill='both',expand=True)
         self.category=tk.StringVar(value='all');side=ttk.Frame(content,width=170);side.pack(side='left',fill='y',padx=(0,14))
         for key,label in CATEGORIES.items():ttk.Radiobutton(side,text=label,value=key,variable=self.category,command=self.category_changed).pack(anchor='w',pady=4)
-        self.cards=ttk.Frame(content);self.cards.pack(side='left',fill='both',expand=True)
+        viewport=ttk.Frame(content);viewport.pack(side='left',fill='both',expand=True)
+        self.canvas=tk.Canvas(viewport,highlightthickness=0,background='#f2f5f8')
+        scrollbar=ttk.Scrollbar(viewport,command=self.canvas.yview);scrollbar.pack(side='right',fill='y')
+        self.canvas.pack(fill='both',expand=True);self.canvas.configure(yscrollcommand=scrollbar.set)
+        self.cards=ttk.Frame(self.canvas);self.cards_window=self.canvas.create_window((0,0),window=self.cards,anchor='nw')
+        self.cards.bind('<Configure>',lambda e:self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.canvas.bind('<Configure>',self.resize_grid)
+        self.canvas.bind('<MouseWheel>',lambda e:self.canvas.yview_scroll(-int(e.delta/120),'units'))
+        self.canvas.bind('<Button-4>',lambda e:self.canvas.yview_scroll(-1,'units'))
+        self.canvas.bind('<Button-5>',lambda e:self.canvas.yview_scroll(1,'units'))
         self.bind_id=app.root.bind('<<PhotoGroupsUpdated>>',lambda e:self.mark_dirty(),add='+')
         self.win.protocol('WM_DELETE_WINDOW',self.close);self.update_choices();self.poll();app.start_photo_work()
+    def resize_grid(self,event):
+        self.canvas.itemconfigure(self.cards_window,width=event.width)
+        if self.resize_job:self.win.after_cancel(self.resize_job)
+        self.resize_job=self.win.after(100,self.resized_grid)
+    def resized_grid(self):
+        self.resize_job=None
+        if not self.closed:self.render()
+    def remember_batch(self,before,paths,kind):
+        from review_actions import remember,record_metric
+        self.last_action=remember(self.case,before,paths,kind);record_metric(self.case,kind,len(paths));self.undo_button.configure(state='normal')
+    def undo_batch(self):
+        from review_actions import undo
+        try:
+            undo(self.case,self.last_action);self.last_action=None;self.undo_button.configure(state='disabled');self.app.save();self.selected.clear();self.dirty=True
+            self.app.root.event_generate('<<PhotoGroupsUpdated>>',when='tail')
+        except Exception as exc:messagebox.showwarning('Cannot Undo This Batch',str(exc),parent=self.win)
+    def group_trip(self):
+        if len(self.selected)!=2 or not self.target.get().startswith('Load '):
+            messagebox.showinfo('Choose Trip Endpoints','Select the first and last container photo of one trip, then choose its load in the bottom bar.',parent=self.win);return
+        if not messagebox.askyesno('Group This Trip','Have you checked that both photos show the same physical trip and its correct first and last times? Photos between them will be grouped for review, not assigned automatically.',parent=self.win):return
+        from trip_bounds import confirm_trip_bounds
+        from review_actions import snapshot
+        try:
+            paths=sorted(self.selected);before=snapshot(self.case)
+            confirm_trip_bounds(self.case,[r for r in self.rows if r['path'] in self.selected],int(self.target.get().split()[-1]))
+            self.remember_batch(before,paths,'trip');self.app.save();self.selected.clear();self.dirty=True;self.app.root.event_generate('<<PhotoGroupsUpdated>>',when='tail')
+        except Exception as exc:messagebox.showwarning('Trip Needs Review',str(exc),parent=self.win)
     def category_changed(self):
         if self.category.get().startswith('stage:'):
             stage=self.category.get().split(':')[1];self.target.set(STAGES[stage]);self.target_help()
@@ -344,7 +386,9 @@ class PhotoFlowWindow:
         if not self.selected or self.app.case is not self.case:return
         from review_assist import confirm_categories
         try:
-            confirm_categories(self.case,sorted(self.selected),category,self.checked);self.app.save()
+            from review_actions import snapshot
+            before=snapshot(self.case);paths=sorted(self.selected)
+            confirm_categories(self.case,paths,category,self.checked);self.remember_batch(before,paths,'category');self.app.save()
             self.selected.clear();self.dirty=True;self.app.root.event_generate('<<PhotoGroupsUpdated>>',when='tail')
         except Exception as exc:messagebox.showwarning('Photos Need Review',str(exc),parent=self.win)
     def mark_boundary(self,kind):
@@ -400,7 +444,7 @@ class PhotoFlowWindow:
             try:
                 if file_digest(r['path'])!=r['sha256']:raise ValueError('Photo changed; updating...')
                 with Image.open(r['path']) as im:
-                    im=ImageOps.exif_transpose(im).convert('RGB');im.thumbnail((max(70,min(250,(self.cards.winfo_width()-60)//columns)),max(30 if size==24 else 40 if size==12 else 70,min(180,(self.cards.winfo_height()-grid_rows*(60 if size==24 else 78 if size==12 else 95))//grid_rows))));preview=ImageTk.PhotoImage(im)
+                    im=ImageOps.exif_transpose(im).convert('RGB');im.thumbnail((max(90,min(340,(max(400,self.canvas.winfo_width())-columns*18)//columns)),110 if size==24 else 150 if size==12 else 220));preview=ImageTk.PhotoImage(im)
                 self.images.append(preview);label=ttk.Label(card,image=preview,style='Card.TLabel');label.pack(expand=True);label.bind('<Button-1>',lambda e,p=r['path']:self.toggle(p))
             except Exception as exc:ttk.Label(card,text=str(exc),wraplength=180).pack()
     def inspect(self,paths):
@@ -415,6 +459,8 @@ class PhotoFlowWindow:
         if self.target.get()=='Choose a Load or Stage':return
         if self.app.case is not self.case:self.close();return
         try:
+            from review_actions import snapshot
+            before=snapshot(self.case);paths=sorted(self.selected)
             target=self.target.get()
             if target.startswith('Load '):
                 number=int(target.split()[-1]);confirm_load_membership(self.case,sorted(self.selected),number,self.checked);self.app.e_load.set(str(number))
@@ -423,7 +469,7 @@ class PhotoFlowWindow:
                 for path in self.selected:
                     if self.checked.get(path,{}).get('sha256')!=file_digest(path):raise ValueError('A selected photo changed. Inspect it again.')
                 apply_visual_stage(self.case,sorted(self.selected),stage,visually_checked=True)
-            self.app.save();self.selected.clear();self.dirty=True;self.app.root.event_generate('<<PhotoGroupsUpdated>>',when='tail')
+            self.remember_batch(before,paths,'assignment');self.app.save();self.selected.clear();self.dirty=True;self.app.root.event_generate('<<PhotoGroupsUpdated>>',when='tail')
         except Exception as exc:messagebox.showwarning('Photos Need Review',str(exc),parent=self.win)
     def next_step(self):
         label=self.load_filter.get()
@@ -435,6 +481,7 @@ class PhotoFlowWindow:
     def close(self):
         if self.closed:return
         self.closed=True
+        if self.resize_job:self.win.after_cancel(self.resize_job)
         if self.job:self.win.after_cancel(self.job)
         if self.bind_id:self.app.root.unbind('<<PhotoGroupsUpdated>>',self.bind_id)
         self.win.destroy()

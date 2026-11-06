@@ -8,7 +8,7 @@ from calculator_evidence import file_digest
 from load_text_runtime import MODEL_DIGEST,RUNTIME
 from small_vision_runtime import SetupCancelled
 
-VERSION=4
+VERSION=5
 LABEL=re.compile(r'^\s*load\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 FOCUSED_LABEL=re.compile(r'^\s*l[oa]{2}d\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 
@@ -21,6 +21,9 @@ def text_numbers(text,focused=False):
  # Read a complete label line, including the common Truck (1) Load (2) form.
  # Do not pull numbers out of prose, invoices or dimension expressions.
  normalized=str(text).translate(CIRCLED)
+ # A label on its own line followed by one integer is a bounded card layout.
+ # Restrict to adjacent nonempty lines; never extract digits from dimensions.
+ normalized=re.sub(r'(?im)^(\s*(?:load|truck\s*#?\s*\(?\s*\d{1,3}\s*\)?\s*[-:,]?\s*load)\s*[#*:＋+«]?)\s*\n[ \t]*(\(?\d{1,3}\)?)[ \t]*$',r'\1 \2',normalized)
  pattern=r'\s*(?:truck\s*#?\s*\(?\s*\d{1,3}\s*\)?\s*[-:,]?\s*)?l'+('[oa]{2}' if focused else 'oa')+r'd\s*[#*:＋+«]?\s*\(?\s*(\d{1,3})\s*\)?\s*[.,]?\s*'
  numbers=set()
  for line in normalized.splitlines():

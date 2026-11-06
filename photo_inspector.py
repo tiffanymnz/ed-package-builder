@@ -11,7 +11,7 @@ class PhotoPane(ttk.Frame):
         self.source = None; self.preview = None; self.scale = 1.; self.rotation = 0; self.fit_mode = True; self.fit_job = None
         ttk.Label(self, text=Path(path).name, wraplength=480).pack(fill='x', pady=5)
         controls=ttk.Frame(self); controls.pack(fill='x')
-        for label, action in [('Fit', self.fit), ('-', lambda:self.zoom(.8)), ('+', lambda:self.zoom(1.25)), ('Rotate', self.rotate)]:
+        for label, action in [('Fit', self.fit), ('-', lambda:self.zoom(.8)), ('+', lambda:self.zoom(1.25)), ('Rotate', self.rotate), ('Tape Detail', self.tape_detail)]:
             ttk.Button(controls,text=label,command=action,width=7).pack(side='left',padx=2)
         self.detail=ttk.Label(controls,text='Drag to pan');self.detail.pack(side='left',padx=8)
         box=ttk.Frame(self);box.pack(fill='both',expand=True)
@@ -56,6 +56,24 @@ class PhotoPane(ttk.Frame):
         self.canvas.xview_moveto(x[0]);self.canvas.yview_moveto(y[0])
     def rotate(self):
         if self.source is not None:self.rotation=(self.rotation+90)%360;self.fit()
+    def tape_detail(self):
+        if self.source is None:return
+        try:
+            import cv2,numpy as np
+            im=self.image().copy();im.thumbnail((800,800));pixels=np.asarray(im)
+            hsv=cv2.cvtColor(pixels,cv2.COLOR_RGB2HSV);mask=cv2.inRange(hsv,(15,65,85),(42,255,255))
+            contours,_=cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            boxes=[cv2.boundingRect(c) for c in contours]
+            boxes=[b for b in boxes if max(b[2:])/max(1,min(b[2:]))>4 and max(b[2:])>min(im.size)*.2]
+            if boxes:
+                x,y,w,h=max(boxes,key=lambda b:b[2]*b[3]);original=self.image();factor=original.width/im.width
+                region_w=max(w*factor*1.4,original.width*.12);region_h=max(h*factor*1.4,original.height*.12)
+                self.fit_mode=False;self.scale=min(self.canvas.winfo_width()/region_w,self.canvas.winfo_height()/region_h,4,6000/max(original.size));self.render()
+                self.canvas.xview_moveto(max(0,(x+w/2)*factor/original.width-self.canvas.winfo_width()/(2*original.width*self.scale)))
+                self.canvas.yview_moveto(max(0,(y+h/2)*factor/original.height-self.canvas.winfo_height()/(2*original.height*self.scale)))
+                self.detail.configure(text='Possible Tape Region · Check Both Endpoints');return
+        except (ImportError,ValueError,OSError):pass
+        self.zoom(2);self.detail.configure(text='Locate the Tape · Check Both Endpoints')
     def render(self):
         im=self.image();size=(max(1,round(im.width*self.scale)),max(1,round(im.height*self.scale)))
         self.preview=ImageTk.PhotoImage(im.resize(size,Image.Resampling.LANCZOS))

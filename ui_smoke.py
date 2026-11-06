@@ -43,6 +43,8 @@ def run(report_path):
             for size in ('6','12','24'):
                 window.page_size.set(size);window.reset_page();root.update()
                 assert len(window.images)==int(size),'Wrong number of review previews'
+                assert all(im.width()>=80 and im.height()>=60 for im in window.images),'Photo previews are too small to inspect'
+                assert window.undo_button.winfo_ismapped(),'Batch undo action is hidden'
                 densities.append(int(size));capture('review-'+size,window.win)
             assert window.apply_button.winfo_rooty()+window.apply_button.winfo_height()<=window.win.winfo_rooty()+window.win.winfo_height(),'Review action extends below the window'
             window.close();root.update()
