@@ -5,7 +5,7 @@ def active_invoices(case):return [d for d in case.get('package_documents',[]) if
 def checked(d):
  if not d.get('confirmed') or d.get('reviewed_sha256')!=file_digest(d['path']):raise ValueError('Open and confirm every final invoice attachment first.')
 def signature(case):
- return hashlib.sha256(json.dumps(sorted((d['path'],file_digest(d['path']),str(d.get('pages',''))) for d in active_invoices(case))).encode()).hexdigest()
+ return hashlib.sha256(json.dumps(sorted((file_digest(d['path']),str(d.get('pages',''))) for d in active_invoices(case))).encode()).hexdigest()
 def use_invoice_version(case,index):
  docs=case.get('package_documents',[]);chosen=docs[index]
  if chosen.get('role')!='invoice':raise ValueError('Select an invoice.')

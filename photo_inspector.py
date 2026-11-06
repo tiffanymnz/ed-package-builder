@@ -12,7 +12,7 @@ class PhotoPane(ttk.Frame):
         ttk.Label(self, text=Path(path).name, wraplength=480).pack(fill='x', pady=5)
         controls=ttk.Frame(self); controls.pack(fill='x')
         for label, action in [('Fit', self.fit), ('-', lambda:self.zoom(.8)), ('+', lambda:self.zoom(1.25)), ('Rotate', self.rotate), ('Tape Detail', self.tape_detail)]:
-            ttk.Button(controls,text=label,command=action,width=7).pack(side='left',padx=2)
+            ttk.Button(controls,text=label,command=action,width=11 if label=='Tape Detail' else 7).pack(side='left',padx=2)
         self.detail=ttk.Label(controls,text='Drag to pan');self.detail.pack(side='left',padx=8)
         box=ttk.Frame(self);box.pack(fill='both',expand=True)
         self.canvas=tk.Canvas(box,background='#202a35',highlightthickness=0)

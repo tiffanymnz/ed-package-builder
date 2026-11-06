@@ -582,7 +582,7 @@ class PackageApp(GuidedApp):
         if self.finish_photo_work(self.performance_check):return
         import copy,queue
         from workflow_metrics import measure
-        results=queue.Queue();snapshot=copy.deepcopy(self.case);directory=self.case_dir
+        results=queue.Queue();snapshot=copy.deepcopy(self.case);directory=self.case_dir;owner=self.case
         self.status.set('Checking local storage and photo-review performance...')
         def work():
             try:results.put((measure(snapshot,directory),None))
@@ -591,6 +591,8 @@ class PackageApp(GuidedApp):
         def poll():
             try:data,error=results.get_nowait()
             except queue.Empty:self.root.after(100,poll);return
+            if self.case is not owner:return
+            self.start_photo_work()
             self.status.set('Local performance check complete.' if not error else 'Performance check could not finish.')
             if error:messagebox.showwarning('Performance Check',error,parent=self.root);return
             text=f"Photos: {data['photos']} ({data['analyzed_photos']} analyzed)\nReview preparation: {data['cold_seconds']} seconds\nCached preparation: {data['cached_seconds']} seconds\nWorking project: {data['project_mb']} MB\nLocal models: {data['model_mb']} MB\nFree disk: {data['free_disk_mb']} MB\n\n"+data['note']

@@ -37,6 +37,13 @@ class WorkflowUpgradeTests(unittest.TestCase):
   self.invoices();self.case['package_documents'][1]['confirmed']=False;before=copy.deepcopy(self.case)
   with self.assertRaises(ValueError):use_invoice_version(self.case,1)
   self.assertEqual(before,self.case)
+ def test_combined_invoice_review_survives_portable_path_change(self):
+  self.invoices();confirm_invoice_set(self.case)
+  import shutil
+  moved=self.root/'reopened';moved.mkdir()
+  for d in self.case['package_documents']:
+   target=moved/Path(d['path']).name;shutil.copyfile(d['path'],target);d['path']=str(target)
+  self.assertFalse(issues(self.case))
  def endpoints(self):return [self.row(0,'2026-08-24T14:00:00'),self.row(1,'2026-08-24T14:30:00')]
  def test_trip_window_is_review_only_never_template_placement(self):
   ends=self.endpoints();confirm_trip_bounds(self.case,ends,1)
@@ -84,3 +91,40 @@ e.publish_bundle([(r/'out.pdf',r/'new.pdf'),(r/'out.txt',r/'new.txt')])
  def test_split_load_labels_are_bounded(self):
   from load_identity import text_numbers
   self.assertEqual(text_numbers('Truck (1)\nLoad\n(2)\nHalf'),[2]);self.assertEqual(text_numbers('Load\n2 x 7 ft'),[]);self.assertEqual(text_numbers('Total\n2'),[]);self.assertEqual(text_numbers('Load\n2.5'),[])
+
+class WorkflowUiUpgradeTests(unittest.TestCase):
+ def setUp(self):
+  import tkinter as tk
+  try:self.root=tk.Tk()
+  except tk.TclError as exc:self.skipTest(str(exc))
+  self.addCleanup(self.root.destroy);self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.folder=Path(self.temp.name)
+  from package_ui import PackageApp
+  from ed_app import make_case
+  from PIL import Image
+  self.app=PackageApp(self.root);self.app.start_photo_work=lambda:None;self.app.case=make_case('UPGRADE-TEST','','Test Vendor',1,35);self.app.case_dir=self.folder
+  for n in range(2):
+   p=self.folder/f'photo{n}.png';Image.new('RGB',(320,240),(n*60,90,110)).save(p);self.app.case['imported_files'].append(dict(path=str(p),name=p.name))
+  self.app.refresh();self.root.update()
+ def test_actual_batch_button_assigns_and_undo_restores_review_safely(self):
+  import time
+  from photo_flow import PhotoFlowWindow
+  from unittest.mock import patch
+  window=PhotoFlowWindow(self.app);self.addCleanup(lambda:window.close() if not window.closed else None);deadline=time.monotonic()+8
+  while len(window.rows)!=2 and time.monotonic()<deadline:self.root.update();time.sleep(.02)
+  self.assertEqual(len(window.rows),2);paths={r['path'] for r in window.rows};window.selected=paths;window.target.set('Load 1');window.update_apply_state()
+  with patch('tkinter.messagebox.showwarning') as warning:window.apply_button.invoke();warning.assert_not_called()
+  self.assertEqual(set(self.app.case['photo_load_assignments']),paths);self.assertEqual(str(window.undo_button['state']),'normal')
+  self.app.case.setdefault('local_photo_results',{})['worker']='preserved'
+  with patch('tkinter.messagebox.showwarning') as warning:window.undo_button.invoke();warning.assert_not_called()
+  self.assertFalse(self.app.case.get('photo_load_assignments'));self.assertEqual(self.app.case['local_photo_results']['worker'],'preserved')
+ def test_invoice_choice_control_excludes_old_version_and_keeps_sources(self):
+  import tkinter as tk
+  from tkinter import ttk
+  paths=[r['path'] for r in self.app.case['imported_files']]
+  self.app.case['package_documents']=[dict(path=p,name=Path(p).name,role='invoice',confirmed=True,reviewed_sha256=file_digest(p)) for p in paths]
+  self.app.go(2);self.root.update();self.app.choose_invoice_version();self.root.update()
+  win=next(w for w in self.root.winfo_children() if isinstance(w,tk.Toplevel))
+  def widgets(parent):
+   for child in parent.winfo_children():yield child;yield from widgets(child)
+  buttons=[w for w in widgets(win) if isinstance(w,ttk.Button) and w['text']=='Use This Version'];self.assertEqual(len(buttons),2);buttons[1].invoke();self.root.update()
+  self.assertEqual([d['role'] for d in self.app.case['package_documents']],['exclude','invoice']);self.assertTrue(all(Path(p).exists() for p in paths))

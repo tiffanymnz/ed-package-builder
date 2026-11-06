@@ -273,12 +273,14 @@ class PhotoFlowWindow:
         from review_actions import remember,record_metric
         self.last_action=remember(self.case,before,paths,kind);record_metric(self.case,kind,len(paths));self.undo_button.configure(state='normal')
     def undo_batch(self):
+        if self.app.case is not self.case:self.close();return
         from review_actions import undo
         try:
             undo(self.case,self.last_action);self.last_action=None;self.undo_button.configure(state='disabled');self.app.save();self.selected.clear();self.dirty=True
             self.app.root.event_generate('<<PhotoGroupsUpdated>>',when='tail')
         except Exception as exc:messagebox.showwarning('Cannot Undo This Batch',str(exc),parent=self.win)
     def group_trip(self):
+        if self.app.case is not self.case:self.close();return
         if len(self.selected)!=2 or not self.target.get().startswith('Load '):
             messagebox.showinfo('Choose Trip Endpoints','Select the first and last container photo of one trip, then choose its load in the bottom bar.',parent=self.win);return
         if not messagebox.askyesno('Group This Trip','Have you checked that both photos show the same physical trip and its correct first and last times? Photos between them will be grouped for review, not assigned automatically.',parent=self.win):return
@@ -413,7 +415,7 @@ class PhotoFlowWindow:
     def render(self):
         for child in self.cards.winfo_children():child.destroy()
         self.images=[];self.check_vars=[];rows=self.filtered()
-        size=int(self.page_size.get());columns=3 if size==6 else 4 if size==12 else 6;grid_rows=(size+columns-1)//columns
+        size=int(self.page_size.get());columns=3 if size==6 else 4 if size==12 else max(3,min(6,max(450,self.canvas.winfo_width())//145));grid_rows=(size+columns-1)//columns
         pages=max(1,(len(rows)+size-1)//size);self.page=min(self.page,pages-1)
         self.visible=rows[self.page*size:self.page*size+size]
         for index in range(6):self.cards.columnconfigure(index,weight=0,uniform='')

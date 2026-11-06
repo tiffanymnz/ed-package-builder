@@ -11,8 +11,12 @@
 
 Photo sorting runs locally. Checked Before, During and After examples can help suggest similar photos in the current case. Dates support ordering; filenames and timestamps do not establish a work stage. Uncertain load identities and loading stages still require a decision.
 
-**Large photo sets:** Photos per Page offers 6, 12 or 24 views. Selection stays checked when switching layouts. Same-date review buckets help bring related source clues together; inspect the trip before assigning the group.
+**Large photo sets:** Photos per Page offers 6, 12 or 24 views. Selection stays checked when switching layouts. Photo grids scroll instead of shrinking all views to fit. Use Group This Trip after selecting its first and last container photo and choosing its load. Both endpoints need an explicit date/time from the same clock source. Open the resulting trip group, inspect its photos, then apply the load only to checked photos. Time-only groups do not fill template boxes. Undo Last Batch reverses the last review action when no later review or source changes conflict.
+
+**Measurement close-up:** Open a photo, use Tape Detail to navigate to a possible tape region, then inspect both endpoints. This does not read or invent dimensions.
+
+**Recovery:** Tools → Recover Interrupted Export restores previous exports after an interrupted write. Tools → Storage and Performance shows local aggregate storage and cached review-preparation timings.
 
 **Hidden a card by mistake?** In Review Load Cards, turn on Show Hidden Cards, inspect the card, then confirm its number and package load to restore it.
 
-**Several invoice attachments?** Open each one in Review Costs. Exclude replaced versions in Import Files and verify the final combined figures without repeating the Initial Services deduction.
+**Several invoice attachments?** Open each one in Review Costs. Use Choose Final Invoice Version to exclude earlier copies while retaining their originals. If all attachments make up one bill, choose Keep These Attachments as the Final Bill and verify the combined total once, without repeating the Initial Services deduction.

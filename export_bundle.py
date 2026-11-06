@@ -4,7 +4,7 @@ from pathlib import Path
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def sync_file(p):
- with open(p,'rb') as stream:os.fsync(stream.fileno())
+ with open(p,'r+b') as stream:os.fsync(stream.fileno())
 def sync_dir(p):
  if os.name!='nt':
   fd=os.open(p,os.O_RDONLY)
