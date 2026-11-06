@@ -8,7 +8,7 @@ from calculator_evidence import file_digest
 
 class PortableProjectTests(unittest.TestCase):
  def setUp(self):
-  self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name);self.source=self.root/'source';self.source.mkdir();(self.source/'originals').mkdir()
+  self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name).resolve();self.source=self.root/'source';self.source.mkdir();(self.source/'originals').mkdir()
   self.photo=self.source/'originals'/'photo.jpg';self.photo.write_bytes(b'original-photo')
   self.case=dict(case_number='TEST',loads=[dict(photos={'empty':str(self.photo)})],imported_files=[dict(path=str(self.photo))],property_stage_reviews={str(self.photo):dict(stage='before',sha256=file_digest(self.photo),source_mtime_ns=self.photo.stat().st_mtime_ns)})
  def tearDown(self):self.temp.cleanup()

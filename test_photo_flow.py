@@ -114,7 +114,9 @@ class PhotoFlowUiTests(unittest.TestCase):
  def test_suggested_load_filter_does_not_preselect_or_assign_photos(self):
   from load_text_runtime import MODEL_DIGEST
   from load_identity import VERSION as LOAD_VERSION
-  path=self.app.case['imported_files'][0]['path'];self.app.case['load_identity_cache']={path:dict(sha256=file_digest(path),model_digest=MODEL_DIGEST,version=LOAD_VERSION,load=2,status='corroborated')}
+  path=self.app.case['imported_files'][0]['path'];sha=file_digest(path)
+  self.app.case['load_identity_cache']={path:dict(sha256=sha,model_digest=MODEL_DIGEST,version=LOAD_VERSION,load=2,options=[2],status='corroborated',readings=[dict(text='Load 2',loads=[2])])}
+  self.app.case['load_card_reviews']={path:dict(sha256=sha,vendor_load=2,load=2,confirmed=True)}
   self.window.mark_dirty();self.wait(lambda:any(r.get('proposal',{}).get('load')==2 for r in self.window.rows))
   self.window.load_filter.set('Suggested Load 2');self.window.filter_load()
   self.assertEqual(self.window.target.get(),'Load 2');self.assertEqual(len(self.window.filtered()),1);self.assertFalse(self.window.selected)

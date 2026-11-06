@@ -78,7 +78,7 @@ class SequenceUiTests(unittest.TestCase):
   self.case=dict(loads=[{'photos':{}}],imported_files=[])
   self.candidates=[]
   for i in range(6):
-   path=Path(self.temp.name)/f'{i}.png';Image.new('RGB',(300,200),(i*30,80,90)).save(path);self.case['imported_files'].append(dict(path=str(path)));self.candidates.append(dict(path=str(path),sha256=file_digest(path),basis='Visual Candidate'))
+   path=Path(self.temp.name)/f'{i}.png';Image.new('RGB',(300,200),(i*30,80,90)).save(path);self.case['imported_files'].append(dict(path=str(path)));self.candidates.append(dict(path=str(path),sha256=file_digest(path),basis='Visual Candidate',reviewed_load_match=True))
   from loading_sequence import STAGES,LoadingSequenceWindow
   index=SimpleNamespace(scores={r['path']:{'full' if stage.startswith('full_') else stage:.8} for (stage,_),r in zip(STAGES,self.candidates)})
   index.shortlist=lambda case,n,slot,**kwargs:([self.candidates[next(i for i,(s,_) in enumerate(STAGES) if s==slot)]],1)
