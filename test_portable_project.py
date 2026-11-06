@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
-from portable_project import export_project,import_project,restored_data
+from portable_project import export_project,import_project,restored_data,fingerprint
 from calculator_evidence import file_digest
 
 class PortableProjectTests(unittest.TestCase):
@@ -15,11 +15,28 @@ class PortableProjectTests(unittest.TestCase):
  def test_template_selections_survive_project_reopen(self):
   self.case['template_photo_reviews']={'1:height':dict(path=str(self.photo),sha256=file_digest(self.photo),load=1,slot='height')}
   self.case['template_geometry_cache']={str(self.photo):dict(sha256=file_digest(self.photo),version=1,vertical=.5,horizontal=0)}
+  self.case['template_photo_dismissals']={'1:width':{str(self.photo):dict(sha256=file_digest(self.photo))}}
+  self.case['load_identity_cache']={str(self.photo):dict(sha256=file_digest(self.photo),status='corroborated',load=1)}
+  self.case['load_sequence_anchors']={'1:start':dict(path=str(self.photo),sha256=file_digest(self.photo),sequence_time='2026-08-24T14:00:00')}
   target=self.root/'template.edcase';export_project(self.case,self.source,target)
   loaded=import_project(target,self.root/'restored-template');record=loaded['template_photo_reviews']['1:height']
   self.assertEqual(record['path'],str(self.root/'restored-template'/'originals'/'photo.jpg'))
   self.assertEqual(record['sha256'],file_digest(record['path']))
   self.assertEqual(loaded['template_geometry_cache'][record['path']]['vertical'],.5)
+  self.assertEqual(loaded['template_photo_dismissals']['1:width'][record['path']]['sha256'],file_digest(record['path']))
+  self.assertIn(record['path'],loaded['load_identity_cache']);self.assertEqual(loaded['load_sequence_anchors']['1:start']['path'],record['path'])
+ def test_aliased_working_folder_fingerprints_and_reopens(self):
+  alias=self.root/'alias'
+  try:alias.symlink_to(self.source,target_is_directory=True)
+  except (OSError,NotImplementedError):self.skipTest('Directory aliases require symlink permission.')
+  path=alias/'originals'/'photo.jpg';case=dict(case_number='ALIAS',loads=[dict(photos={'empty':str(path)})],imported_files=[dict(path=str(path))])
+  self.assertEqual(fingerprint(case,alias),fingerprint(case,self.source))
+  target=self.root/'alias.edcase';export_project(case,alias,target)
+  loaded=import_project(target,self.root/'restored-alias')
+  self.assertEqual(Path(loaded['loads'][0]['photos']['empty']).read_bytes(),b'original-photo')
+ def test_external_dismissed_source_is_rejected(self):
+  self.case['template_photo_dismissals']={'1:width':{str(self.root/'outside.jpg'):dict(sha256='outside')}}
+  with self.assertRaises(ValueError):export_project(self.case,self.source,self.root/'bad-dismissal.edcase')
  def test_external_template_review_source_is_rejected(self):
   self.case['template_photo_reviews']={'1:height':dict(path=str(self.root/'outside.jpg'))}
   with self.assertRaises(ValueError):export_project(self.case,self.source,self.root/'bad-template.edcase')

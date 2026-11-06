@@ -232,7 +232,7 @@ def checked_rows(records,rows,model_digest=None,prompt_version=None):
 def confirm_load_membership(case,paths,load_number,rows):
     from calculator_evidence import file_digest
     from datetime import datetime,timezone
-    if not isinstance(load_number,int) or not 1<=load_number<=len(case.get('loads',[])):raise ValueError('Choose an existing load.')
+    if isinstance(load_number,bool) or not isinstance(load_number,int) or not 1<=load_number<=len(case.get('loads',[])):raise ValueError('Choose an existing load.')
     prepared=[]
     for path in dict.fromkeys(paths):
         for n,load in enumerate(case['loads'],1):

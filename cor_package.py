@@ -29,14 +29,28 @@ def number(value):
 def rounded(value): return number(value).quantize(CENT, rounding=ROUND_HALF_UP)
 def cash(value): return f'${rounded(value):,.2f}'
 
+def document_source_signatures(case,roles=None):
+    from calculator_evidence import file_digest
+    result=[]
+    for item in case.get('package_documents',[]):
+        if item.get('role') in ('exclude','approval') or (roles is not None and item.get('role') not in roles):continue
+        try:digest=file_digest(item.get('path',''))
+        except (OSError,ValueError):digest='missing'
+        result.append(dict(role=item.get('role'),pages=item.get('pages',''),sha256=digest))
+    return result
+
+
 def bid_fingerprint(case):
     import hashlib
     def numeric_value(raw):
         try:return str(number(raw).normalize())
         except ValueError:return str(raw or '')
     value={key:case.get(key) for key in ('package_documents','vendor')}
+    value['document_sources']=document_source_signatures(case)
     value['rate_per_cyd']=numeric_value(case.get('rate_per_cyd'))
     value['loads']=[{key:numeric_value(load.get(key,1 if key=='fill_fraction' else 0)) for key in ('length_ft','width_ft','side_height_ft','overage_height_ft','overage_cyd','fill_fraction')} for load in case.get('loads',[])]
+    methods=[load.get('quantity_rounding','full_precision') for load in case.get('loads',[])]
+    if any(method!='full_precision' for method in methods):value['quantity_rounding']=methods
     return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
 
 def financial_fingerprint(case):
@@ -47,9 +61,12 @@ def financial_fingerprint(case):
         try:return str(number(raw).normalize())
         except ValueError:return str(raw or '')
     value={key:stable(case.get(key,'')) for key in keys}
+    value['invoice_sources']=document_source_signatures(case,{'invoice'})
     value['hud_calculation_rule']='first-10-cyd-at-request-rate-v1'
     value['load_dimensions']=[{key:stable(load.get(key,'')) for key in ('length_ft','width_ft','side_height_ft',
         'overage_height_ft','overage_cyd','measured_load_cyd','fill_fraction')} for load in case.get('loads',[])]
+    methods=[load.get('quantity_rounding','full_precision') for load in case.get('loads',[])]
+    if any(method!='full_precision' for method in methods):value['quantity_rounding']=methods
     return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
 
 def totals(case):
@@ -314,22 +331,40 @@ def apply_photo_suggestions(case, selected):
             case.pop('bid_confirmation_hash',None);case.pop('financial_confirmation_hash',None)
     return len(touched)
 
+def comparable_bid_amount(record,quantity):
+    amount=number(record.get('amount'))
+    if record.get('pricing_basis')!='per_cyd':
+        quoted=record.get('debris_quantity_cyd')
+        if quoted not in ('',None) and abs(number(quoted)-number(quantity))>Decimal('.02'):
+            raise ValueError('Bid quantity differs from the measured quantity. Confirm an updated bid or the price per CYD shown on the bid.')
+        return amount
+    rate=number(record.get('unit_rate_per_cyd'))
+    quoted=number(record.get('debris_quantity_cyd'))
+    if rate<=0 or quoted<=0 or abs(rounded(rate*quoted)-amount)>Decimal('.01'):
+        raise ValueError('The bid total does not match its confirmed quantity and price per CYD.')
+    return rounded(rate*number(quantity))
+
+
 def validate(case):
-    problems = []
+    from evidence_audit import loading_photo_conflicts,reviewed_source_conflicts
+    problems = [finding['detail'] for finding in loading_photo_conflicts(case)+reviewed_source_conflicts(case)]
     for i, load in enumerate(case.get('loads',[]),1):
         try: volume(load)
         except Exception as exc: problems.append(f'Load {i}: Measurements need review: {exc}.')
         if not load.get('measurements_confirmed'): problems.append(f'Load {i}: Confirm the container measurements and final fill.')
         _, calculator_issue = screenshot_status(load)
         if calculator_issue: problems.append(f'Load {i}: {calculator_issue}')
+        from load_requirements import applicable,evidence_conflicts
+        for slot in evidence_conflicts(load):problems.append('Load '+str(i)+': '+slot+' evidence conflicts with the confirmed partial fill. Correct the fill or clear that placement.')
         for key in ('height','width','length','empty','quarter','half','three_quarters','full_1','full_2','receipt'):
+            if not applicable(load,key):continue
             path=load.get('photos',{}).get(key)
             if not path or not Path(path).is_file(): problems.append(f'Load {i}: Add {key.replace("_"," ")} evidence.')
         if not load.get('disposal_photo') or not Path(load['disposal_photo']).is_file(): problems.append(f'Load {i}: Add unloading / disposal evidence.')
         # The package template uses one reviewed photo per dimension. Additional
         # views support verification; their count is not a package requirement.
     if not case.get('loads'): problems.append('Add at least one reviewed load.')
-    elif not case['loads'][0].get('evidence_first_10_cyd'): problems.append('Add the first-10-CYD evidence.')
+    elif not case['loads'][0].get('evidence_first_10_cyd') or not Path(case['loads'][0]['evidence_first_10_cyd']).is_file(): problems.append('Add the first-10-CYD evidence.')
     for phase in ('before_photos','during_photos','after_photos'):
         if not any(Path(p).is_file() for p in case.get(phase,[])): problems.append(f'Add property {phase.replace("_photos","")} photos.')
     if case.get('invoice_quantity_basis') not in ('includes','excludes'): problems.append('Confirm the invoiced quantity basis.')
@@ -344,6 +379,9 @@ def validate(case):
         if not record.get('confirmed'): problems.append(f"Confirm document: {record.get('name','Document')}.")
         path = Path(record.get('path',''))
         if not path.is_file(): problems.append(f'Missing document file: {path.name}.'); continue
+        if record.get('reviewed_sha256'):
+            from calculator_evidence import file_digest
+            if record['reviewed_sha256']!=file_digest(path):problems.append(f'Document changed after review: {path.name}. Open and confirm it again.')
         try:
             if path.suffix.lower() == '.pdf':
                 with fitz.open(path) as d:
@@ -369,7 +407,11 @@ def validate(case):
         if value['rate']<=0:problems.append('Confirm a positive HUD request rate.')
         if value['quantity'] < 10: problems.append('Total debris is below 10 CYD. Resolve whether a COR request applies.')
         if value['gross'] < value['allowance']: problems.append('The requested amount cannot be negative. Review quantity, rate and allowance.')
-        if amounts and value['gross'] > min(amounts)+Decimal('.01'):
+        comparable=[]
+        for bid in bids:
+            try:comparable.append(comparable_bid_amount(bid,value['quantity']))
+            except ValueError as exc:problems.append(str(exc))
+        if comparable and value['gross'] > min(comparable)+Decimal('.01'):
             problems.append('Calculated gross exceeds the lowest entered bid. Reconcile the rate or bid before approval.')
         shown=number(case.get('invoice_deduction_usd'))
         if case.get('invoice_deduction_status')=='yes' and shown!=value['allowance']: problems.append('The invoice deduction differs from 10 CYD at the HUD request rate. Reconcile the invoice.')
@@ -477,17 +519,20 @@ def template_load_pages(doc, load, number):
     """Two template tables followed by a readable full-page dump receipt."""
     photos=load.get('photos',{});calculator,_=screenshot_status(load)
     first=doc.new_page(width=612,height=792)
-    first.insert_text((75,63),f'LOAD {number}',fontsize=10)
+    from load_requirements import applicable,stage_label
+    caption=f'LOAD {number}'
+    if load.get('measurements_confirmed') and float(load.get('fill_fraction',1))<1:caption+=' - FINAL FILL '+str(round(float(load['fill_fraction'])*100,2))+'%'
+    first.insert_text((75,63),caption,fontsize=10)
     for index,(label,path) in enumerate([
         ('Cubic Yard Calculation',calculator),('Final Height',photos.get('height')),
         ('Width',photos.get('width')),('Length',photos.get('length')),
-        ('Empty Container',photos.get('empty')),('1/4 Full',photos.get('quarter'))]):
+        ('Empty Container',photos.get('empty')),(stage_label(load,'quarter','1/4 Full'),photos.get('quarter'))]):
         row,col=divmod(index,2)
         template_cell(first,fitz.Rect(72+col*234,72+row*210,306+col*234,282+row*210),label,path)
     second=doc.new_page(width=612,height=792)
     for index,(label,key) in enumerate([('1/2 Full','half'),('3/4 Full','three_quarters'),('Full Container','full_1'),('Full Container','full_2')]):
         row,col=divmod(index,2)
-        template_cell(second,fitz.Rect(72+col*234,72+row*205,306+col*234,277+row*205),label,photos.get(key))
+        template_cell(second,fitz.Rect(72+col*234,72+row*205,306+col*234,277+row*205),stage_label(load,key,label),photos.get(key),note='Not Applicable to This Partial Load' if not applicable(load,key) else None)
     receipt=photos.get('receipt')
     template_cell(second,fitz.Rect(72,482,540,707),'Dump Receipt',note='See Following Page' if receipt and Path(receipt).is_file() else None)
     if receipt and Path(receipt).is_file():
@@ -505,10 +550,30 @@ def property_photo_pages(doc, paths, title):
             if path and Path(path).is_file():insert_picture(page,rectangle,path)
             else:page.insert_textbox(rectangle,'Evidence Not Attached',fontsize=9)
 
+def export_sources(case):
+    """Record the exact selected inputs; this audit stays outside the PDF."""
+    from calculator_evidence import file_digest
+    from template_review import SLOTS, assigned_path
+    sources=[]
+    for item in case.get('package_documents',[]):
+        if item.get('role') not in ORDER:continue
+        sources.append(dict(section=ROLES[item['role']],path=item['path'],pages=item.get('pages','')))
+    for n,load in enumerate(case.get('loads',[]),1):
+        for slot,label in SLOTS:
+            path=assigned_path(load,slot)
+            if path:sources.append(dict(section=f'Load {n}',slot=slot,label=label,path=path))
+        if load.get('include_supporting_measurements'):
+            sources.extend(dict(section=f'Load {n}',slot='supporting_measurement',path=p) for p in load.get('extra_measurement_photos',[]) if p)
+    for key in ('before_photos','during_photos','after_photos'):
+        sources.extend(dict(section=key,path=p) for p in case.get(key,[]))
+    for source in sources:source['sha256']=file_digest(source['path'])
+    return sources
+
 def assemble(case, destination, issues=None):
     """Build PDF without Word/LibreOffice. All selected source pages are preserved."""
     destination = Path(destination); destination.parent.mkdir(parents=True,exist_ok=True)
     errors = list(dict.fromkeys((issues or [])+validate(case)))
+    sources=export_sources(case)
     with tempfile.TemporaryDirectory(dir=destination.parent,prefix='.cor-build-') as temp:
         temp = Path(temp); doc = fitz.open(); manifest=[]
         try:
@@ -546,14 +611,22 @@ def assemble(case, destination, issues=None):
             # Internal checks are saved separately, never printed in the package.
             if not errors:
                 (temp/'COR_Request_Description.txt').write_text(description(case),encoding='utf-8')
-            report=dict(status='Items Missing' if errors else 'Complete',issues=errors,pages=len(doc),sections=manifest)
+            report=dict(status='Items Missing' if errors else 'Complete',issues=errors,pages=len(doc),sections=manifest,sources=sources)
             doc.set_metadata({'title':f"ED COR Package - {case.get('case_number','Case')} - DRAFT",'author':'ED Package Builder'})
             doc.save(temp/'package.pdf',garbage=3,deflate=True)
         finally: doc.close()
-        # Publish only after the entire document was assembled successfully.
-        os.replace(temp/'package.pdf',destination)
-        (destination.parent/'Package_Review.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+        # Refuse a mixture of old and changed source bytes, preserving the prior PDF.
+        from calculator_evidence import file_digest
+        if any(file_digest(item['path'])!=item['sha256'] for item in sources):
+            raise ValueError('A source changed during export. Inspect it again before exporting.')
+        with fitz.open(temp/'package.pdf') as checked:
+            if len(checked)!=report['pages'] or checked.needs_pass:
+                raise ValueError('The finished PDF could not be verified.')
+        # Stage the report and description before publishing any previous output.
+        from export_bundle import publish_bundle
+        review=temp/'Package_Review.json'
+        review.write_text(json.dumps(report,indent=2),encoding='utf-8')
         desc=destination.parent/'COR_Request_Description.txt'
-        if (temp/desc.name).exists(): os.replace(temp/desc.name,desc)
-        elif desc.exists(): desc.unlink()  # Never leave a description from an older, valid state.
+        publish_bundle([(destination,temp/'package.pdf'),(destination.parent/review.name,review),
+                        (desc,temp/desc.name if (temp/desc.name).exists() else None)])
     return report

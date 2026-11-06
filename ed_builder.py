@@ -42,6 +42,16 @@ def volume(load):
     fill=numeric(load.get('fill_fraction',1),'fill_fraction',.01)
     if fill>1:raise ValueError('Fill fraction must be greater than 0 and at most 1')
     if fill<1 and (over or explicit):raise ValueError('Overage requires a full container; review the measurements')
+    method=load.get('quantity_rounding','full_precision')
+    if method not in ('full_precision','capacity_then_fill'):
+        raise ValueError('Choose a supported cubic-yard rounding method')
+    if method=='capacity_then_fill':
+        from decimal import Decimal,ROUND_HALF_UP
+        d=lambda x:Decimal(str(x))
+        capacity=(d(L)*d(W)*d(H)/Decimal(27)).quantize(Decimal('.01'),rounding=ROUND_HALF_UP)
+        extra=d(L)*d(W)*d(over)/Decimal(27) if over else d(explicit)
+        return dict(container=float(capacity),overage=float(extra),total=float(capacity*d(fill)+extra),
+                    length=L,width=W,height=H,over_height=over)
     # Uniform height only where vendor states overage spans whole footprint.
     return {'container':L*W*H/27,'overage':(L*W*over/27 if over else explicit),
             'total':L*W*(H*fill+over)/27+explicit,'length':L,'width':W,'height':H,'over_height':over}
@@ -126,8 +136,9 @@ def build(data,dest):
         for key in ALL:
             if key=='calculator':continue
             p=photos.get(key,'')
-            if not p or not Path(p).is_file():missing.append(key)
-            else:put_picture(cells[key],p)
+            from load_requirements import applicable
+            if (not p or not Path(p).is_file()) and applicable(load,key):missing.append(key)
+            elif p and Path(p).is_file():put_picture(cells[key],p)
         # Merge receipt heading across the two receipt table cells was already part of template.
         extra=load.get('extra_measurement_photos',[])
         if len(extra)<3:errors.append(f'Load {i}: only {len(extra)+3} measurement photos listed (guide requests 6; the template displays 3)')
