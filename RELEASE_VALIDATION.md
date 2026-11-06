@@ -1,6 +1,6 @@
 # ED Package Builder v49: Validation and Release Status
 
-**Status: release candidate, not final.** There is a narrow, measured recognition improvement and several review/recovery fixes. The Windows build cannot yet be verified because repository writes are denied and the browser is signed out. No source was pushed or Windows build triggered in this session.
+**Status: release candidate, not final.** There is a narrow, measured recognition improvement and several review/recovery fixes. The source is uploaded to codex/accuracy-release-v49 in draft pull request #1. Windows validation is running; earlier attempts exposed workflow setup issues and outdated Windows test fixtures, now corrected. The first complete Windows suite ran all 398 checks and reported four failures and one error; its path-alias expectations and source-bound evidence fixtures were corrected without loosening application checks. No successful current Windows executable is claimed yet.
 
 ## Implemented
 
@@ -74,7 +74,7 @@ Public source contains no vendor photos, raw OCR caches, property records or pri
 | Reference quality | Duplicate template source selections and incomplete receipt/load links must not be treated as clean training truth. |
 | Financial policy | The exact $2,500 boundary and threshold amount basis remain unconfirmed in the source audit. The unverified $45/CYD comparison rule is not invented. Existing ambiguous-case checks remain. |
 | Invoice revisions | The user must exclude replaced versions and verify combined totals; incompatible revisions are not silently combined. |
-| Windows | Authenticated repository access is needed to upload the prepared source and run its current frozen/native/UI checks. |
+| Windows | Source uploaded; current frozen/native/UI checks must pass before the Windows artifact is considered verified. |
 | First use / efficiency | A real first-time-user walkthrough and time comparison have not occurred. Navigation density is implemented but is not proof of time saved. |
 | Export interruption | Caught write failures are rolled back and portable projects are verified. Power-loss durability across multiple separate export files is not guaranteed. |
 
