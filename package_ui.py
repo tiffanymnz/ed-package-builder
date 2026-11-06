@@ -1,3 +1,4 @@
+from ui_windows import fit_window
 """Import-first user workflow for a complete ED COR package."""
 import hashlib
 import json
@@ -22,21 +23,34 @@ SLOT_LABELS['financial_pdfs'] = 'Invoice / Financial Document'
 guided_ui.STEPS[:] = [('Import Files', 'Start with the vendor files. No measurements or pricing required yet.'),
                      ('Review Loads', 'Match the photos, then confirm only the details that need your input.'),
                      ('Review Costs', 'Check the invoice figures, first-10 amount and lowest bid.'),
-                     ('Create Package', 'Review the complete package and export one combined COR draft.')]
+                     ('Create Package', 'Review the complete package and export one combined COR package.')]
 
 class PackageApp(GuidedApp):
     def __init__(self, root):
+        self._background_photos=None;self._deferred_project_save=False
         self._case_temp=None;self._project_file=None;self._saved_project_fingerprint=None
         self.scan_cancel=threading.Event()
         self.scan_running = False
         super().__init__(root)
-        root.title('ED Package Builder')
+        root.title('ED Package Builder');fit_window(root,root,(1180,800),(900,640))
         self.status.set('Create a case with its case number and vendor, then import your files.')
         def add_load_text_tool(widget):
             if isinstance(widget,ttk.Menubutton):
                 menu=widget.nametowidget(str(widget['menu']))
-                menu.add_command(label='Review Load Text Suggestions',command=self.review_suggestions)
-                menu.add_command(label='Read Imported Photo Text',command=self.scan_photos)
+                menu.delete(0,'end')
+                menu.add_command(label='Package Overview',command=self.package_overview)
+                menu.add_command(label='Review Load Cards',command=self.review_load_cards)
+                menu.add_command(label='Organize Photos',command=self.organize_photos)
+                menu.add_command(label='Fill Template',command=self.template_photo_review)
+                menu.add_command(label='Recover Interrupted Export',command=self.recover_export)
+                menu.add_command(label='Storage and Performance',command=self.performance_check)
+                advanced=tk.Menu(menu,tearoff=False)
+                advanced.add_command(label='Detailed Photo Review',command=self.visual_photo_review)
+                advanced.add_command(label='Text Suggestions',command=self.review_suggestions)
+                advanced.add_command(label='Photo Sorting Setup',command=self.local_ai_review)
+                advanced.add_command(label='Audit Source Files',command=self.audit_evidence)
+                menu.add_cascade(label='Advanced',menu=advanced)
+                menu.add_separator();menu.add_command(label='How to Use',command=self.help)
             if isinstance(widget,ttk.Button) and widget.cget('text')=='Save':widget.configure(text='Save Project',command=self.save_project)
             for child in widget.winfo_children():add_load_text_tool(child)
         add_load_text_tool(root)
@@ -73,8 +87,24 @@ class PackageApp(GuidedApp):
         super().save()
         if self.case and self._case_temp is not None:self.status.set('Temporary session · Use Save Project to keep your progress.')
 
+    def finish_photo_work(self,action):
+        service=self._background_photos
+        if not ((service and service.case is self.case and service.running) or self.scan_running):return False
+        if service:service.cancel.set()
+        self.scan_cancel.set();self.status.set('Finishing the current photo, then continuing...')
+        if not self._deferred_project_save:
+            self._deferred_project_save=True;case=self.case
+            def finish():
+                if self.case is not case:self._deferred_project_save=False;return
+                if (service and service.running) or self.scan_running:self.root.after(200,finish);return
+                self._deferred_project_save=False;action()
+                if action==self.save_project and self.case is case:self.start_photo_work()
+            self.root.after(200,finish)
+        return True
+
     def save_project(self):
         if not self.require():return False
+        if self.finish_photo_work(self.save_project):return False
         if any(window.running for window in getattr(self,'_photo_sorting_windows',[])) or self.scan_running:
             messagebox.showinfo('Processing in Progress','Stop photo sorting and wait for the current photo or text reading to finish before saving the portable project.');return False
         from portable_project import export_project,fingerprint
@@ -85,12 +115,21 @@ class PackageApp(GuidedApp):
         if not path:return False
         try:
             self.status.set('Saving project... Large photo sets may take a moment.');self.root.update_idletasks()
-            export_project(self.case,self.case_dir,path)
+            from background_task import run_file_task
+            self._file_task_running=True
+            try:run_file_task(self.root,'Saving Project',lambda cancel,progress:export_project(self.case,self.case_dir,path,cancel=cancel,progress=progress))
+            finally:self._file_task_running=False
             self._project_file=Path(path);self._saved_project_fingerprint=fingerprint(self.case,self.case_dir)
             self.status.set('Project saved: '+str(path));return True
+        except InterruptedError:
+            self.status.set('Saving cancelled. Your previous saved project is unchanged.');return False
         except Exception as exc:messagebox.showerror('Cannot Save Project',str(exc));return False
 
     def prepare_leave(self):
+        service=self._background_photos
+        if service and service.case is self.case:service.cancel.set()
+        if service and service.running:
+            self.status.set('Finishing the current photo. Try closing or opening a project again in a moment.');return False
         if self.scan_running:
             self.scan_cancel.set();self.status.set('Stopping text reading after the current image. Try closing or changing cases again in a moment.');return False
         if any(window.running for window in getattr(self,'_photo_sorting_windows',[])):
@@ -105,11 +144,15 @@ class PackageApp(GuidedApp):
         return True
 
     def release_temporary_case(self):
+        card=getattr(self,'_load_card_review',None)
+        if card and not card.closed:card.close()
+        if self._background_photos:self._background_photos.close();self._background_photos=None
         for window in getattr(self,'_photo_sorting_windows',[]):
             if not window.closed:window.close()
         if self._case_temp is not None:self._case_temp.cleanup();self._case_temp=None
 
     def open_case(self):
+        if self.finish_photo_work(self.open_case):return
         import tempfile
         from portable_project import import_project,fingerprint
         path=filedialog.askopenfilename(title='Open Project',filetypes=[('ED Project','*.edcase'),('Older Case','case.json')])
@@ -130,6 +173,8 @@ class PackageApp(GuidedApp):
             messagebox.showerror('Cannot Open Project',str(exc))
 
     def close_app(self):
+        if getattr(self,'_file_task_running',False):return
+        if self.finish_photo_work(self.close_app):return
         if not self.prepare_leave():return
         if self.case:self.save()
         self.release_temporary_case();self.root.destroy()
@@ -137,6 +182,7 @@ class PackageApp(GuidedApp):
         RUNTIME.stop()
 
     def new_case(self):
+        if self.finish_photo_work(self.new_case):return
         if self.case: self.save()
         win=tk.Toplevel(self.root);win.title('New Case');win.geometry('480x330');win.transient(self.root);win.grab_set()
         body=ttk.Frame(win,padding=24);body.pack(fill='both',expand=True)
@@ -164,7 +210,7 @@ class PackageApp(GuidedApp):
         row=ttk.Frame(header,style='Card.TFrame');row.pack(fill='x',pady=6)
         ttk.Button(row,text='Import Folder',style='Primary.TButton',command=self.import_files).pack(side='left')
         ttk.Button(row,text='Import ZIPs',command=self.import_zips).pack(side='left',padx=8)
-        ttk.Button(row,text='Organize Photos Locally',command=self.local_ai_review).pack(side='left')
+        ttk.Button(row,text='Organize Photos',command=self.organize_photos).pack(side='left')
         count=len(self.case.get('imported_files',[]))
         storage_mb=sum(Path(r['path']).stat().st_size for r in self.case.get('imported_files',[]) if Path(r['path']).is_file())/1_000_000
         ttk.Label(header,text=f'{count} Files Imported  ·  {storage_mb:.0f} MB  ·  {len(self.case["loads"])} Load(s)',style='Card.TLabel',foreground=ACCENT).pack(anchor='w',pady=(12,0))
@@ -197,7 +243,7 @@ class PackageApp(GuidedApp):
         self.case['photo_suggestions']=suggestions
         self.save();self.refresh();self.go(0)
         self.status.set('Files Imported. Review the document rows, then continue to Review Loads.')
-        # Bulk OCR is explicit; importing thousands of photos does not start a second full scan.
+        self.start_photo_work()
 
     def add_bid(self):
         self.add_document(purpose='bid')
@@ -239,6 +285,10 @@ class PackageApp(GuidedApp):
         selected=self.documents.selection()
         if not selected:messagebox.showinfo('Select a Document','Select a document row first.');return
         index=int(selected[0]);item=self.case['package_documents'][index]
+        from calculator_evidence import file_digest
+        try:opened_digest=file_digest(item['path'])
+        except OSError as exc:messagebox.showerror('Cannot Review Document',str(exc));return
+        reviewed_case=self.case
         win=tk.Toplevel(self.root);win.title('Review Package Document');win.geometry('640x560');win.transient(self.root);win.grab_set()
         body=ttk.Frame(win,padding=24);body.pack(fill='both',expand=True)
         ttk.Label(body,text=item.get('name','Document'),font=(self.ui_font,13,'bold'),wraplength=570).pack(anchor='w',pady=(0,10))
@@ -257,22 +307,35 @@ class PackageApp(GuidedApp):
             var=tk.StringVar(value=item.get(key,''));values[key]=var;ttk.Entry(row,textvariable=var).pack(side='left',fill='x',expand=True)
         bid_fields_end=row
         quantity_row=ttk.Frame(body)
-        ttk.Label(quantity_row,text='Debris Quantity on Bid (CYD)',width=31).pack(side='left')
+        quantity_line=ttk.Frame(quantity_row);quantity_line.pack(fill='x')
+        ttk.Label(quantity_line,text='Debris Quantity on Bid (CYD)',width=31).pack(side='left')
         values['debris_quantity_cyd']=tk.StringVar(value=item.get('debris_quantity_cyd',''))
-        ttk.Entry(quantity_row,textvariable=values['debris_quantity_cyd']).pack(side='left',fill='x',expand=True)
+        ttk.Entry(quantity_line,textvariable=values['debris_quantity_cyd']).pack(side='left',fill='x',expand=True)
+        rate_row=ttk.Frame(quantity_row);rate_row.pack(fill='x',pady=(6,0))
+        ttk.Label(rate_row,text='Price per CYD ($), Only if Shown').pack(side='left')
+        values['unit_rate_per_cyd']=tk.StringVar(value=item.get('unit_rate_per_cyd',''))
+        ttk.Entry(rate_row,textvariable=values['unit_rate_per_cyd'],width=12).pack(side='right')
         def show_bid_quantity(*args):
             if role.get()==ROLES['bid']:quantity_row.pack(fill='x',pady=7,after=bid_fields_end)
             else:quantity_row.pack_forget()
         role.trace_add('write',show_bid_quantity);show_bid_quantity()
         def confirm(split=False):
+            if self.case is not reviewed_case:
+                messagebox.showwarning('Case Changed','Open this document again in the current case.',parent=win);return
             record=dict(item,role=next(key for key,value in ROLES.items() if value==role.get()),confirmed=True,**{key:value.get().strip() for key,value in values.items()})
             try:
                 import fitz
                 from cor_package import parse_pages
+                if file_digest(record['path'])!=opened_digest:raise ValueError('This document changed. Close and reopen it before confirming.')
+                record['reviewed_sha256']=opened_digest
                 if Path(record['path']).suffix.lower()=='.pdf':
                     with fitz.open(record['path']) as source:parse_pages(record.get('pages'),len(source))
                 if record['role']=='bid':
                     number(record['amount'])
+                    record['pricing_basis']='per_cyd' if record.get('unit_rate_per_cyd') else 'fixed_total'
+                    if record['pricing_basis']=='per_cyd':
+                        from cor_package import comparable_bid_amount
+                        comparable_bid_amount(record,record['debris_quantity_cyd'])
                     if number(record['debris_quantity_cyd'])<=0:raise ValueError('Enter the debris quantity shown on this bid.')
             except Exception as exc:messagebox.showwarning('Check Document Details',str(exc),parent=win);return
             if split:self.case['package_documents'].append(record)
@@ -282,7 +345,7 @@ class PackageApp(GuidedApp):
         ttk.Button(row,text='Add as Another Section',command=lambda:confirm(True)).pack(side='left')
         ttk.Button(row,text='Confirm Document',style='Primary.TButton',command=confirm).pack(side='right')
 
-    def scan_photos(self,records=None,review_when_done=False,on_complete=None):
+    def scan_photos(self,records=None,review_when_done=False,on_complete=None,background=False):
         if not self.require() or self.scan_running:return
         self.scan_cancel.clear()
         self.save();records=list(records if records is not None else self.case.get('imported_files',[]));case_dir=self.case_dir
@@ -307,6 +370,16 @@ class PackageApp(GuidedApp):
                     if not unchanged:
                         notes.append('A source file changed during text reading. Run it again.');continue
                     cache[item['path']]=dict(sha256=digest,text=text,error=error)
+                current=cache.get(item['path'],{})
+                source=self.case.get('local_photo_results',{}).get(item['path'],{})
+                if 'timing_text' not in current and source.get('sha256')==digest and (source.get('card_detected') or source.get('card_regions') or source.get('prediction',{}).get('category') in ('container_photos','measurement')):
+                    from local_reader import read_timestamp
+                    from visual_photo_review import timing_clues
+                    clues=timing_clues(item['path'],text)
+                    timing='' if not clues['flags'] and any(c.get('date') and c.get('time') for c in clues['clues']) else read_timestamp(item['path'])[0]
+                    if file_digest(item['path'])!=digest:
+                        notes.append('A source changed during date/time reading.');cache.pop(item['path'],None);continue
+                    current['timing_text']=timing;cache[item['path']]=current
                 row=photo_suggestion(item,text);row['reader_note']=error;row['sha256']=digest
                 rows.append(row)
                 if error:notes.append(error)
@@ -319,8 +392,8 @@ class PackageApp(GuidedApp):
             self.case['photo_suggestions']=rows;self.case['photo_text_cache']=cache
             from cor_package import apply_document_text_suggestions
             apply_document_text_suggestions(self.case);self.save()
-            if self.current_step()==0:self.draw_case()
-            if self.current_step()==2:self.draw_finance()
+            if not background and self.current_step()==0:self.draw_case()
+            if not background and self.current_step()==2:self.draw_finance()
             self.status.set('Photo Reading Complete. Open Visual Photo Review to inspect conditions and date clues.' if not notes else 'Some text could not be read. Visual Photo Review remains available; date-only photos are usable.')
             if review_when_done:self.review_suggestions()
             if on_complete:on_complete()
@@ -376,7 +449,7 @@ class PackageApp(GuidedApp):
         existing=getattr(self,'_template_review',None)
         if existing and not existing.closed and existing.win.winfo_exists():existing.win.lift();return
         from template_review import TemplateReviewWindow
-        self.save();self._template_review=TemplateReviewWindow(self)
+        self.save();self._template_review=TemplateReviewWindow(self);self.start_photo_work()
 
     def assign(self):
         slot=self.slot.get()
@@ -398,16 +471,62 @@ class PackageApp(GuidedApp):
             except Exception as exc:messagebox.showerror('Photo Review Failed',str(exc))
         else:super().assign()
 
+    def start_photo_work(self):
+        if not self.case:return
+        from photo_flow import BackgroundPhotoWork
+        previous=self._background_photos
+        paths={r['path'] for r in self.case.get('imported_files',[]) if Path(r['path']).suffix.lower() in IMAGE_EXT}
+        if not paths:return
+        more=previous and not paths.issubset(previous.record_paths)
+        if previous and previous.case is self.case and not previous.closed and not previous.cancel.is_set() and not more:return previous
+        if previous and previous.running:
+            previous.cancel.set()
+            if not getattr(previous,'restart_pending',False):
+                previous.restart_pending=True;case=self.case
+                def restart():
+                    if self.case is not case:return
+                    if previous.running:self.root.after(300,restart);return
+                    self.start_photo_work()
+                self.root.after(300,restart)
+            return previous
+        if previous:previous.close()
+        self._background_photos=BackgroundPhotoWork(self)
+        return self._background_photos
+
+    def review_load_cards(self):
+        if not self.require():return
+        previous=getattr(self,'_load_card_review',None)
+        if previous and not previous.closed and previous.case is self.case:previous.win.lift();return
+        from load_card_review import CardReviewWindow
+        CardReviewWindow(self)
+    def organize_photos(self):
+        if not self.require():return
+        from photo_flow import PhotoFlowWindow
+        previous=getattr(self,'_photo_flow',None)
+        if previous and not previous.closed and previous.case is self.case:self.start_photo_work();previous.win.lift();return
+        self._photo_flow=PhotoFlowWindow(self)
+
     def draw_evidence(self):
         super().draw_evidence()
         if not self.case:return
+        legacy=list(self.evidence_tab.winfo_children())
+        for child in legacy:child.pack_forget()
         row=ttk.Frame(self.evidence_tab,padding=(0,0,0,10))
-        row.pack(fill='x',before=self.evidence_tab.winfo_children()[0])
-        ttk.Button(row,text='Review Suggested Photos',style='Primary.TButton',command=self.template_photo_review).pack(side='left')
+        row.pack(fill='x')
+        ttk.Button(row,text='Review Load Cards',command=self.review_load_cards).pack(side='left',padx=(0,8))
+        ttk.Button(row,text='1 · Organize Photos',style='Primary.TButton',command=self.organize_photos).pack(side='left')
+        ttk.Button(row,text='2 · Fill Template',command=self.template_photo_review).pack(side='left',padx=8)
         ttk.Button(row,text='Container Details',command=self.measurements).pack(side='left',padx=8)
-        ttk.Button(row,text='+ Add Load',command=self.add_load).pack(side='left',padx=8)
-        ttk.Button(row,text='All Photos',command=self.visual_photo_review).pack(side='left')
-        ttk.Label(self.evidence_tab,text='Choose the clearest photo for each template slot. Use other views to verify measurements; supporting measurement photos are optional.',wraplength=780,style='Muted.TLabel').pack(fill='x',before=self.evidence_tab.winfo_children()[1],pady=(0,8))
+        options=ttk.Menubutton(row,text='More');menu=tk.Menu(options,tearoff=False);options.configure(menu=menu);options.pack(side='right')
+        menu.add_command(label='Advanced Photo Review',command=self.visual_photo_review)
+        def manual():
+            for child in list(self.evidence_tab.winfo_children()):
+                if child not in legacy:child.pack_forget()
+            for child in legacy:child.pack(fill='both',expand=True)
+        menu.add_command(label='Manual Photo Assignment',command=manual)
+        card=self.card(self.evidence_tab,'Review the Cards, Then the Photos','If the vendor supplied load cards, confirm them first. Review each suggested group, then choose the clearest evidence for the template.')
+        ttk.Label(card,text='Photo sorting and text reading run locally in the background. Dates can help with order; they do not prove a load number or fill level.',wraplength=780,style='Card.TLabel').pack(anchor='w',pady=12)
+        ttk.Label(card,text='Same container, different loads? Keep the loads separate. Compare loading progress, visible load cards and any available date/time clues.',wraplength=780,style='Card.TLabel',foreground=MUTED).pack(anchor='w')
 
     def measurements(self):
         self.save();index=int(self.e_load.get())-1;load=self.case['loads'][index]
@@ -428,6 +547,9 @@ class PackageApp(GuidedApp):
             parent=advanced if key in ('overage_height_ft','overage_cyd','overage_note') else body
             row=ttk.Frame(parent);row.pack(fill='x',pady=4);ttk.Label(row,text=label,width=41).pack(side='left')
             var=tk.StringVar(value=str(float(load.get(key,default))*100 if key=='fill_fraction' else load.get(key,default)));values[key]=var;ttk.Entry(row,textvariable=var,width=18).pack(side='left',fill='x',expand=True)
+        rounding=tk.StringVar(value='Round Capacity Before Applying Fill' if load.get('quantity_rounding')=='capacity_then_fill' else 'Keep Full Precision Until Load Total')
+        ttk.Label(advanced,text='Calculation Rounding — Match the Attached Calculation').pack(anchor='w')
+        ttk.Combobox(advanced,textvariable=rounding,state='readonly',values=['Keep Full Precision Until Load Total','Round Capacity Before Applying Fill'],width=48).pack(anchor='w',pady=5)
         ttk.Checkbutton(advanced,text='Include Supporting Measurement Photos in Package',variable=supporting).pack(anchor='w',pady=5)
         def toggle_details():
             if advanced.winfo_manager():advanced.pack_forget()
@@ -438,6 +560,7 @@ class PackageApp(GuidedApp):
             proposed=dict(load,**{key:value.get() for key,value in values.items()})
             try:
                 proposed['fill_fraction']=str(float(values['fill_fraction'].get())/100)
+                proposed['quantity_rounding']='capacity_then_fill' if rounding.get()=='Round Capacity Before Applying Fill' else 'full_precision'
                 calculated=volume(proposed)
             except Exception as exc:messagebox.showwarning('Measurements Need Review',str(exc),parent=win);return False
             load.update(proposed);load['include_supporting_measurements']=supporting.get();load['measurements_confirmed']=True;self.case['bid_review_confirmed']=False
@@ -455,6 +578,51 @@ class PackageApp(GuidedApp):
         if tool and not tool.closed and tool.case is self.case and tool.win.winfo_exists():
             tool.refresh_tree();tool.render()
 
+    def performance_check(self):
+        if not self.require():return
+        if self.finish_photo_work(self.performance_check):return
+        import copy,queue
+        from workflow_metrics import measure
+        results=queue.Queue();snapshot=copy.deepcopy(self.case);directory=self.case_dir;owner=self.case
+        self.status.set('Checking local storage and photo-review performance...')
+        def work():
+            try:results.put((measure(snapshot,directory),None))
+            except Exception as exc:results.put((None,str(exc)))
+        threading.Thread(target=work,daemon=True).start()
+        def poll():
+            try:data,error=results.get_nowait()
+            except queue.Empty:self.root.after(100,poll);return
+            if self.case is not owner:return
+            self.start_photo_work()
+            self.status.set('Local performance check complete.' if not error else 'Performance check could not finish.')
+            if error:messagebox.showwarning('Performance Check',error,parent=self.root);return
+            text=f"Photos: {data['photos']} ({data['analyzed_photos']} analyzed)\nReview preparation: {data['cold_seconds']} seconds\nCached preparation: {data['cached_seconds']} seconds\nWorking project: {data['project_mb']} MB\nLocal models: {data['model_mb']} MB\nFree disk: {data['free_disk_mb']} MB\n\n"+data['note']
+            messagebox.showinfo('Storage and Performance',text,parent=self.root)
+        self.root.after(100,poll)
+    def recover_export(self):
+        from export_bundle import recover_bundles
+        folder=filedialog.askdirectory(parent=self.root,title='Choose the Export Folder')
+        if not folder:return
+        try:messagebox.showinfo('Export Recovery',f'{recover_bundles(folder)} interrupted export(s) restored.',parent=self.root)
+        except Exception as exc:messagebox.showerror('Recovery Needs Attention',str(exc),parent=self.root)
+    def choose_invoice_version(self):
+        from invoice_review import use_invoice_version
+        win=tk.Toplevel(self.root);win.title('Choose Final Invoice');win.transient(self.root)
+        ttk.Label(win,text='Open and check the final version. Other invoice versions remain in your project but are excluded from the package.',wraplength=550).pack(padx=18,pady=12)
+        def choose(index):
+            try:
+                use_invoice_version(self.case,index);self.save();win.destroy();self.draw_finance()
+            except Exception as exc:messagebox.showwarning('Invoice Needs Review',str(exc),parent=win)
+        for index,doc in enumerate(self.case.get('package_documents',[])):
+            if doc.get('role')!='invoice':continue
+            line=ttk.Frame(win,padding=8);line.pack(fill='x')
+            ttk.Button(line,text='Open '+doc.get('name',Path(doc['path']).name),command=lambda p=doc['path']:self.open_original(p)).pack(side='left')
+            ttk.Button(line,text='Use This Version',command=lambda i=index:choose(i)).pack(side='right')
+    def keep_invoice_set(self):
+        from invoice_review import confirm_invoice_set
+        if not messagebox.askyesno('Confirm Final Bill','Do these attachments form one final bill, with no replaced versions or duplicate charges? Enter the combined invoice total once.',parent=self.root):return
+        try:confirm_invoice_set(self.case);self.save();self.draw_finance()
+        except Exception as exc:messagebox.showwarning('Invoice Needs Review',str(exc),parent=self.root)
     def draw_finance(self):
         if not self.case:self.empty(self.finance_tab);return
         from cor_package import extract_costs
@@ -471,7 +639,12 @@ class PackageApp(GuidedApp):
                 if self.case.get(key) in ('',None):self.case[key]=value
         content=self.scroll_page(self.finance_tab);self.finance_displays={}
         card=self.card(content,'1. Check the Invoice','Figures read from the invoice are suggestions. Compare them with the original and correct anything that is wrong.')
-        if invoices:ttk.Button(card,text='Open Invoice',command=lambda:self.open_original(invoices[0]['path'])).pack(anchor='w',pady=(0,8))
+        for invoice in invoices:
+            ttk.Button(card,text='Open Invoice' if len(invoices)==1 else 'Open Invoice · '+invoice.get('name',Path(invoice['path']).name),command=lambda p=invoice['path']:self.open_original(p)).pack(anchor='w',pady=(0,8))
+        if len(invoices)>1:
+            ttk.Label(card,text='Choose the final invoice version, or keep all attachments if they make up one final bill.',style='Card.TLabel',wraplength=580).pack(anchor='w',pady=6)
+            ttk.Button(card,text='Choose Final Invoice Version',command=self.choose_invoice_version).pack(anchor='w',pady=4)
+            ttk.Button(card,text='Keep These Attachments as the Final Bill',command=self.keep_invoice_set).pack(anchor='w',pady=4)
         ttk.Label(card,text='Invoice figures found — please check them.' if suggestions else 'Enter any figures the app could not read.',style='Card.TLabel',foreground=MUTED).pack(anchor='w')
         grid=ttk.Frame(card,style='Card.TFrame');grid.pack(fill='x',pady=8)
         for i,(label,key) in enumerate([('Cubic Yards on Invoice','invoice_quantity_cyd'),('Invoice Total ($)','invoice_amount_usd'),('HUD Request Rate ($/CYD)','rate_per_cyd')]):
@@ -524,10 +697,21 @@ class PackageApp(GuidedApp):
         ttk.Button(card,text='Add Bid — Image or PDF',command=lambda:(self.go(0),self.add_bid())).pack(anchor='w',pady=(0,8))
         bids=[d for d in self.case.get('package_documents',[]) if d.get('role')=='bid']
         def bid_sort(d):
-            try:return number(d.get('amount'))
-            except ValueError:return number('999999999')
-        ordered=sorted(bids,key=bid_sort)
-        listing='\n'.join(('Lowest Received: ' if i==0 else '')+f"{d.get('vendor') or d.get('name','Bid')}: ${d.get('amount') or 'Amount Needed'}" for i,d in enumerate(ordered)) or 'No bids attached yet.'
+            try:
+                from cor_package import comparable_bid_amount
+                return comparable_bid_amount(d,totals(self.case)['quantity'])
+            except (ValueError,KeyError):return number('999999999')
+        ordered=sorted(bids,key=bid_sort);lines=[]
+        for i,d in enumerate(ordered):
+            name=d.get('vendor') or d.get('name','Bid')
+            try:
+                from cor_package import comparable_bid_amount
+                comparison=comparable_bid_amount(d,totals(self.case)['quantity'])
+                label=('Lowest Comparable Bid: ' if i==0 else '')+f"{name}: ${d.get('amount')}"
+                if d.get('pricing_basis')=='per_cyd':label+=f' · ${comparison:.2f} at Measured Quantity'
+            except (ValueError,KeyError):label=f'{name}: Check Bid Quantity and Price'
+            lines.append(label)
+        listing='\n'.join(lines) or 'No bids attached yet.'
         ttk.Label(card,text=listing,style='Card.TLabel',wraplength=580).pack(anchor='w',pady=8)
         ttk.Button(card,text='Confirm Lowest Bid',command=self.confirm_bids).pack(anchor='w')
         card=self.card(content,'Amount to Request')
@@ -558,7 +742,10 @@ class PackageApp(GuidedApp):
             else:basis=self.case['invoice_quantity_basis']
         except ValueError as exc:
             self.invoice_details_frame.pack(fill='x');messagebox.showwarning('Check Invoice Details',str(exc));return
-        if not messagebox.askyesno('Confirm Invoice Details','Have you checked the invoice, the photo-supported quantity, and the calculated first-10-CYD deduction at the request rate?'):return
+        invoices=[d for d in self.case.get('package_documents',[]) if d.get('role')=='invoice']
+        prompt='Have you checked the invoice, the photo-supported quantity, and the calculated first-10-CYD deduction at the request rate?'
+        if len(invoices)>1:prompt=f'Have you checked all {len(invoices)} invoice attachments, excluded replaced versions, and entered the combined final figures with Initial Services deducted only once?'
+        if not messagebox.askyesno('Confirm Invoice Details',prompt):return
         self.vars['invoice_quantity_basis'].set(basis)
         self.vars['first_10_prior_work'].set('no')
         self.vars['verified_first_10_amount'].set(str(value['allowance']))
@@ -589,7 +776,8 @@ class PackageApp(GuidedApp):
             bid_issues=bid_requirements(self.case)
             if bid_issues:raise ValueError('\n'.join(bid_issues))
             if not bids or not all(d.get('confirmed') for d in bids):raise ValueError('Add and confirm every received bid in Import Files.')
-            amounts=[number(d.get('amount')) for d in bids];value=totals(self.case)
+            from cor_package import comparable_bid_amount
+            value=totals(self.case);amounts=[comparable_bid_amount(d,value['quantity']) for d in bids]
             if value['gross']>min(amounts):raise ValueError('The measured total at this rate exceeds the lowest bid. Review the figures.')
         except Exception as exc:messagebox.showwarning('Review Bids',str(exc));return
         if messagebox.askyesno('Confirm Bid Review','Have all received bids been included, and does the selected vendor and rate represent the lowest bid? '):
@@ -615,6 +803,35 @@ class PackageApp(GuidedApp):
         if any(word in lower for word in ('calculator','measurement','photo','image','evidence','source audit','container','load ')):return 1
         return 2
 
+    def package_overview(self):
+        if not self.require():return
+        from workflow_status import package_inventory
+        rows=package_inventory(self.case)
+        win=tk.Toplevel(self.root);win.configure(background=BG);win.title('Package Overview');win.geometry('850x620');win.minsize(650,450)
+        ttk.Label(win,text='Package Overview',font=(self.ui_font,20,'bold')).pack(anchor='w',padx=18,pady=16)
+        ttk.Label(win,text='Open an item to continue. Attached files still undergo source and cost checks before export.',wraplength=780).pack(anchor='w',padx=18)
+        body=ttk.Frame(win,padding=18);body.pack(fill='both',expand=True)
+        tree=ttk.Treeview(body,columns=('next',),show='tree headings',selectmode='browse')
+        tree.heading('#0',text='Package Section');tree.heading('next',text='Next Action / Status')
+        tree.column('#0',width=220);tree.column('next',width=450)
+        scrollbar=ttk.Scrollbar(body,command=tree.yview);scrollbar.pack(side='right',fill='y')
+        tree.configure(yscrollcommand=scrollbar.set);tree.pack(fill='both',expand=True)
+        for i,row in enumerate(rows):tree.insert('','end',iid=str(i),text=row['label'],values=(row['detail'],))
+        def resume():
+            if not tree.selection():return
+            row=rows[int(tree.selection()[0])];win.destroy()
+            if row['kind']=='template':
+                self.e_load.set(str(row['load']));self.template_photo_review()
+                window=getattr(self,'_template_review',None)
+                if window and row.get('slot'):window.refresh_tree(row['slot']);window.reset_page()
+            elif row['kind']=='stage':
+                self.organize_photos();window=self._photo_flow
+                window.category.set('property_photos');window.target.set(row['label']);window.target_help();window.reset_page()
+            else:self.go(row['step'])
+        ttk.Button(win,text='Continue Selected Item',style='Primary.TButton',command=resume).pack(anchor='e',padx=18,pady=(0,16))
+        tree.bind('<Double-1>',lambda e:resume())
+        if rows:tree.selection_set('0')
+
     def draw_checks(self):
         if not self.case:self.empty(self.check_tab);return
         self.clear(self.check_tab)
@@ -625,7 +842,8 @@ class PackageApp(GuidedApp):
         self.review_count=ttk.Label(self.check_tab,text='',font=(self.ui_font,11,'bold'),wraplength=580)
         self.review_count.pack(anchor='w',pady=(0,8))
         actions=ttk.Frame(self.check_tab);actions.pack(fill='x',pady=(0,10))
-        ttk.Button(actions,text='Go to Selected Step',command=self.resolve_issue).pack(side='left')
+        ttk.Button(actions,text='Package Overview',command=self.package_overview).pack(side='left')
+        ttk.Button(actions,text='Go to Selected Step',command=self.resolve_issue).pack(side='left',padx=7)
         ttk.Button(actions,text='Request Description',command=self.preview_description).pack(side='left',padx=7)
         ttk.Button(actions,text='Refresh',command=self.show_checks).pack(side='left')
         body=ttk.Frame(self.check_tab);body.pack(fill='both',expand=True)
@@ -662,10 +880,10 @@ class PackageApp(GuidedApp):
         try:
             report=assemble(self.case,folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf'),issues)
             if destination:
-                from portable_project import atomic_copy
-                atomic_copy(folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf'),destination)
+                from export_bundle import publish_bundle
                 text=folder/'COR_Request_Description.txt'
-                if text.is_file():atomic_copy(text,Path(destination).with_suffix('.description.txt'))
+                publish_bundle([(Path(destination),folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf')),
+                                (Path(destination).with_suffix('.description.txt'),text if text.is_file() else None)])
                 self.status.set('Package saved: '+str(destination))
             messagebox.showinfo('Package Exported',f"{report['pages']} Pages Assembled\nStatus: {report['status']}\n\nUse Open Output Folder to find the PDF and review report. The request description is saved when all checks are resolved.")
             if not destination:self.open_output()

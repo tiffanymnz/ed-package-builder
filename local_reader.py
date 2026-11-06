@@ -38,7 +38,7 @@ try {
 } finally { $stream.Dispose() }
 '''
 
-def read_image(path):
+def read_image(path,page_mode=11):
     try:
         with tempfile.TemporaryDirectory(prefix='ed-ocr-') as folder:
             target = Path(folder)/'image.png'
@@ -47,7 +47,7 @@ def read_image(path):
             options=dict(capture_output=True,timeout=25)
             if sys.platform=='win32': options['creationflags']=subprocess.CREATE_NO_WINDOW
             if shutil.which('tesseract'):
-                process=subprocess.run(['tesseract',str(target),'stdout','--psm','11'],**options)
+                process=subprocess.run(['tesseract',str(target),'stdout','--psm',str(page_mode)],**options)
             elif sys.platform=='win32':
                 env=os.environ.copy();env['ED_OCR_INPUT']=str(target)
                 code=base64.b64encode(WINDOWS_SCRIPT.encode('utf-16le')).decode()
@@ -56,3 +56,35 @@ def read_image(path):
             if process.returncode: return '', 'Local OCR could not read this photo. Review it manually.'
             return process.stdout.decode('utf-8',errors='replace').strip(), ''
     except Exception: return '', 'Local OCR could not read this photo. Review it manually.'
+
+
+def read_timestamp(path):
+    """Read the common printed footer separately; output remains unverified.
+
+    No dates or clocks are synthesized. Sources with another timestamp layout
+    may still require review. Original image bytes are never modified.
+    """
+    from PIL import ImageEnhance
+    try:
+        with tempfile.TemporaryDirectory(prefix='ed-clock-') as folder:
+            target=Path(folder)/'footer.png'
+            with Image.open(path) as source:
+                image=ImageOps.exif_transpose(source).convert('RGB')
+                crop=image.crop((0,round(image.height*.7),image.width,image.height))
+                crop.thumbnail((1100,1100))
+                crop=crop.resize((crop.width*2,crop.height*2))
+                ImageEnhance.Contrast(crop).enhance(1.4).save(target)
+            text,error=read_image(target,page_mode=6)
+            from visual_photo_review import timing_clues
+            clues=timing_clues(path,text)
+            if not clues['flags'] and any(c.get('date') and c.get('time') for c in clues['clues']):return text,error
+            # White printed overlay text needs different preparation from dark
+            # handwriting. Isolate observed bright neutral strokes, not digits.
+            import cv2
+            import numpy as np
+            pixels=np.asarray(crop);hsv=cv2.cvtColor(pixels,cv2.COLOR_RGB2HSV)
+            mask=(hsv[:,:,1]<90)&(hsv[:,:,2]>190)
+            Image.fromarray(np.where(mask,0,255).astype(np.uint8)).save(target)
+            alternative,other_error=read_image(target,page_mode=6)
+            return text+'\n'+alternative,error or other_error
+    except (OSError,ValueError):return '', 'Printed date/time could not be read.'

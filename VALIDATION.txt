@@ -1,0 +1,1 @@
+v49: 398 software checks; 328 passed, 70 skipped, 0 failures. Source package and actual CPU card-reader smoke tests PASS. Native development sample: 10 correct load numbers, 2 unresolved, 0 false numbers on 53 controls; two narrow half-fraction suggestions recovered. Windows and first-use validation pending. See RELEASE_VALIDATION.md.
