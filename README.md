@@ -10,4 +10,4 @@ Prepare an Excessive Debris package from vendor documents and photos. Start with
 
 Read START_HERE.md for the workflow and INSTALL.txt for building the Windows portable app.
 
-**Current status: v50 validation candidate.** See RELEASE_VALIDATION.md before deployment. The Windows build, graphical checks and real first-use walkthrough have not yet been verified for this version.
+**Current status: v50 validation candidate.** See RELEASE_VALIDATION.md before deployment. Windows validation passed 417 checks with no skips, plus frozen native-reader, interface and export checks. A real first-use staff walkthrough and recognition accuracy on new properties remain unverified.

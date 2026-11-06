@@ -1,5 +1,5 @@
-# v50: Coordinated Review and Reliability Upgrade
+# v50: Batch Review, Invoice Versions and Export Recovery
 
-Adds scrollable 6/12/24-photo views, guarded batch undo, explicit trip endpoint grouping, final-invoice version handling, interrupted-export recovery, tape-region navigation, local aggregate performance/storage diagnostics, split-line load-card label parsing, and Unicode card fractions. No new model assets or telemetry.
+Adds readable scrollable photo grids, work-area-aware main/review windows, guarded batch undo, checked trip-window review groups, explicit final-invoice versions, portable combined-invoice confirmation, interrupted-export recovery, tape-region navigation and local aggregate diagnostics. Split-line load labels and Unicode fractions are supported. No new model assets.
 
-Local validation: 412 tests, 342 passed, 70 GUI checks skipped because this host has no display. Windows frozen/UI validation and a real first-use timing study remain pending. Time-window groups are review queues, not verified load assignments. Recognition changes have not yet demonstrated a new independent accuracy score.
+Windows run #27: 417 tests passed with no skips. Frozen photo reader, card reader, interface, taskbar-boundary and export checks passed. Recognition coverage and first-time staff efficiency remain limited and unproven on new properties; see RELEASE_VALIDATION.md.
