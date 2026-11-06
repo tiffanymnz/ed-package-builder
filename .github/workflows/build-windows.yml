@@ -18,8 +18,6 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 15
-    env:
-      ED_STARTUP_LOG_DIR: ${{ runner.temp }}/ed-startup
 
     defaults:
       run:
@@ -43,6 +41,7 @@ jobs:
 
       - name: Prepare verified test weights and block test network
         run: |
+          "ED_STARTUP_LOG_DIR=$env:RUNNER_TEMP/ed-startup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $modelDir = Join-Path $env:RUNNER_TEMP 'ed-test-model'
           New-Item -ItemType Directory -Force $modelDir | Out-Null
           $model = Join-Path $modelDir 'vision.onnx'
