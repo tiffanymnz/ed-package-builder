@@ -111,7 +111,7 @@ class WorkflowUiUpgradeTests(unittest.TestCase):
   from unittest.mock import patch
   window=PhotoFlowWindow(self.app);self.addCleanup(lambda:window.close() if not window.closed else None);deadline=time.monotonic()+8
   while len(window.rows)!=2 and time.monotonic()<deadline:self.root.update();time.sleep(.02)
-  self.assertEqual(len(window.rows),2);paths={r['path'] for r in window.rows};window.selected=paths;window.target.set('Load 1');window.update_apply_state()
+  self.assertEqual(len(window.rows),2);paths={r['path'] for r in window.rows};window.selected=set(paths);window.target.set('Load 1');window.update_apply_state()
   with patch('tkinter.messagebox.showwarning') as warning:window.apply_button.invoke();warning.assert_not_called()
   self.assertEqual(set(self.app.case['photo_load_assignments']),paths);self.assertEqual(str(window.undo_button['state']),'normal')
   self.app.case.setdefault('local_photo_results',{})['worker']='preserved'

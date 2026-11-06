@@ -40,10 +40,11 @@ class ExportFailureTests(unittest.TestCase):
    replace=os.replace;failed=False
    def fail_report(a,b):
     nonlocal failed
-    if Path(b)==review and not failed:failed=True;raise PermissionError('report locked')
+    if Path(b).resolve()==review.resolve() and not failed:failed=True;raise PermissionError('report locked')
     return replace(a,b)
    with patch('export_bundle.os.replace',side_effect=fail_report):
     with self.assertRaises(PermissionError):cor_package.assemble(case,pdf)
+   self.assertTrue(failed,'The simulated output failure was not injected')
    self.assertEqual(pdf.read_bytes(),b'old pdf');self.assertEqual(review.read_text(),'old report');self.assertEqual(desc.read_text(),'old text')
 
 class ProjectFailureTests(unittest.TestCase):
