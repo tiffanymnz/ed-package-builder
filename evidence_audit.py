@@ -35,7 +35,7 @@ def loading_photo_conflicts(case):
                 groups[cache[path]].append((n,slot))
             except (OSError,ValueError):continue
     for uses in groups.values():
-        if len(uses)>1:issues.append(dict(severity='BLOCKING',load=','.join(map(str,sorted({n for n,_ in uses}))),type='loading_stage_reuse',detail='One photograph is used for multiple loading stages or loads: '+', '.join(f'Load {n} {slot.replace("_"," ")}' for n,slot in uses)+'. Choose separate evidence.'))
+        if len(uses)>1:issues.append(dict(severity='BLOCKING',load=','.join(map(str,sorted({n for n,_ in uses}))),placements=uses,type='loading_stage_reuse',detail='One photograph is used for multiple loading stages or loads: '+', '.join(f'Load {n} {slot.replace("_"," ")}' for n,slot in uses)+'. Choose separate evidence.'))
     return issues
 
 def reviewed_shared_dimension(case,entries,digest):
@@ -76,7 +76,7 @@ def collect(case):
     for path,places in usages.items():
         p=Path(path)
         if not p.is_file():
-            issues.append({'severity':'BLOCKING','load':places[0][0],'type':'file_missing','detail':f'Assigned source missing: {p.name} ({places})'})
+            issues.append({'severity':'BLOCKING','load':places[0][0],'type':'file_missing','detail':f'The selected source file is missing: {p.name}. Select the current source photo again.'})
         else:
             # Hash only files selected for final package, not thousands of raw photos.
             h=hashlib.sha256()
@@ -85,14 +85,14 @@ def collect(case):
             sha_map[h.hexdigest()].append((path,places))
         load_ids={i for i,_ in places if i>0}
         if len(load_ids)>1 and not (p.is_file() and reviewed_shared_dimension(case,[(path,places)],hashlib.sha256(p.read_bytes()).hexdigest())):
-            issues.append({'severity':'BLOCKING','load':','.join(map(str,sorted(load_ids))),'type':'cross_load_reuse','detail':f'Same file assigned to different loads: {p.name} ({places})'})
+            issues.append({'severity':'BLOCKING','load':','.join(map(str,sorted(load_ids))),'type':'cross_load_reuse','detail':f'The same photo is selected for loads {", ".join(map(str,sorted(load_ids)))}: {p.name}. Check each trip and choose separate evidence, or confirm shared container measurements.'})
         if len(places)>1 and len(load_ids)<=1:
-            issues.append({'severity':'REVIEW','load':next(iter(load_ids),0),'type':'repeated_slot','detail':f'Same file used for multiple slots: {p.name} ({places})'})
+            issues.append({'severity':'REVIEW','load':next(iter(load_ids),0),'type':'repeated_slot','detail':f'The same photo is selected more than once: {p.name}. Check that every placement shows the required evidence.'})
     for digest,entries in sha_map.items():
         if len(entries)<2:continue
         load_ids={i for _,places in entries for i,_ in places if i>0}
         if len(load_ids)>1 and not reviewed_shared_dimension(case,entries,digest):
-            issues.append({'severity':'BLOCKING','load':','.join(map(str,sorted(load_ids))),'type':'identical_content_cross_load','detail':f'Byte-identical photos assigned across loads: '+', '.join(Path(p).name for p,_ in entries)})
+            issues.append({'severity':'BLOCKING','load':','.join(map(str,sorted(load_ids))),'type':'identical_content_cross_load','detail':f'Copies of the same photograph are selected for different loads: '+', '.join(Path(p).name for p,_ in entries)+'. Check the source photos for each trip.'})
     issues.extend(loading_photo_conflicts(case));issues.extend(reviewed_source_conflicts(case))
     return {'work_order':case.get('work_order',''),'case_number':case.get('case_number',''),'loads':len(case.get('loads',[])),'assigned_unique_paths':len(usages),'issues':issues,'blocking':sum(i['severity']=='BLOCKING' for i in issues),'review':sum(i['severity']=='REVIEW' for i in issues),'note':'Checks file existence and exact-byte reuse, not photo validity. Similar photos and incorrect load stages still need human verification.'}
 

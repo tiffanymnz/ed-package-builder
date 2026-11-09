@@ -555,6 +555,7 @@ class GuidedApp(App):
             for i, issue in enumerate(issues):
                 route = self.issue_step(issue)
                 text = issue.split(' / ', 1)[-1]
+                text = text.removeprefix('Source audit: ')
                 for raw, human in SLOT_LABELS.items(): text = text.replace('image '+raw, 'photo: '+human)
                 text = text.replace('First 10 CYD progression/remaining debris evidence unlinked', 'Assign first-10-CYD evidence in Photos & files.')
                 text = text.replace('Missing property before and/or after photo selections', 'Assign property before-work and after-work photos.')
@@ -598,7 +599,10 @@ class GuidedApp(App):
 
     def open_output(self):
         if not self.require(): return
-        folder = self.case_dir/'output'; folder.mkdir(exist_ok=True)
+        folder = self.case_dir/'output'
+        if getattr(self,'_last_export_case_dir',None)==self.case_dir:
+            folder=getattr(self,'_last_export_folder',folder)
+        folder.mkdir(parents=True,exist_ok=True)
         try:
             if sys.platform == 'win32': os.startfile(str(folder))
             elif sys.platform == 'darwin': subprocess.Popen(['open', str(folder)])
@@ -612,3 +616,4 @@ class GuidedApp(App):
             '3. INVOICE\nCopy the invoice figures and confirm how the calculated first-10-CYD deduction was handled.\n\n'
             '4. REVIEW & EXPORT\nSelect an issue to return to the right step. Generate a Word draft and use Open output folder.\n\n'
             'Changes save when moving between steps and closing the app. Ctrl+S saves at any time. Advanced tools are under More.')
+

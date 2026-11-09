@@ -81,6 +81,8 @@ def totals(case):
 def description(case):
     if case.get('financial_confirmation_hash')!=financial_fingerprint(case):
         raise ValueError('Confirm the invoice and current rate-based HUD deduction first.')
+    invoice_issues=financial_issues(case)
+    if invoice_issues:raise ValueError('\n'.join(invoice_issues))
     bid_issues=bid_requirements(case)
     if bid_issues:raise ValueError('\n'.join(bid_issues))
     value = totals(case)
@@ -429,6 +431,29 @@ def validate(case):
     except Exception: problems.append('Confirm measurements for every load and the final rate.')
     return list(dict.fromkeys(problems))
 
+def financial_issues(case):
+    """Check invoice arithmetic independently of a saved confirmation flag."""
+    problems=[]
+    try:
+        value=totals(case)
+        if value['rate']<=0:problems.append('Confirm a positive HUD request rate.')
+        if case.get('invoice_quantity_basis') not in ('includes','excludes'):problems.append('Confirm the invoiced quantity basis.')
+        if case.get('invoice_deduction_status') not in ('yes','no','alternate'):problems.append('Confirm the deduction shown on the invoice.')
+        shown=number(case.get('invoice_deduction_usd'))
+        if case.get('invoice_deduction_status')=='yes' and shown!=value['allowance']:problems.append('The invoice deduction differs from 10 CYD at the HUD request rate. Reconcile the invoice.')
+        if case.get('invoice_deduction_status')=='no' and shown!=0:problems.append('The invoice deduction conflicts with the selected No answer.')
+        billed=number(case.get('invoice_quantity_cyd'))
+        target=value['quantity'] if case.get('invoice_quantity_basis')=='includes' else value['request_quantity']
+        if abs(billed-target)>Decimal('.02'):problems.append('Invoice cubic yards differ from the photo-supported measured quantity. Reconcile the invoice; do not overwrite the photo measurements.')
+        if case.get('invoice_quantity_basis')=='includes':
+            expected=value['gross']-(shown if case.get('invoice_deduction_status')=='yes' else Decimal('0'))
+            if abs(number(case.get('invoice_amount_usd'))-expected)>Decimal('.06'):problems.append('The net invoice amount does not reconcile to its stated deduction.')
+        elif case.get('invoice_quantity_basis')=='excludes':
+            if abs(number(case.get('invoice_amount_usd'))-value['request'])>Decimal('.06'):problems.append('The invoice excludes the first 10 CYD, but its total does not reconcile to the excess-debris amount.')
+    except (ValueError,KeyError,TypeError):problems.append('Confirm the invoice figures, measured quantity and final rate.')
+    return problems
+
+
 def required_bid_count(case):
     """Apply the confirmed under/over rule where plausible amount bases agree."""
     amounts=[]
@@ -485,12 +510,34 @@ def new_page(doc, title, subtitle=''):
     if subtitle: page.insert_textbox(fitz.Rect(32,40,580,69), subtitle, fontsize=9, color=(.35,.4,.46))
     return page
 
+def append_pdf_page(destination,source,index):
+    """Copy a source page including its transparency color group.
+
+    MuPDF's page insertion omits /Group. Graft that object with its referenced
+    color resources so imported documents retain their original rendering.
+    """
+    destination.insert_pdf(source,from_page=index,to_page=index,final=0)
+    try:
+        group=fitz.mupdf.pdf_dict_gets(fitz.mupdf.pdf_lookup_page_obj(fitz._as_pdf_document(source),index),'Group')
+        if not fitz.mupdf.pdf_is_null(group):
+            mapping=destination.Graftmaps[source._graft_id]
+            copied=fitz.mupdf.pdf_graft_mapped_object(mapping.this,group)
+            page=fitz.mupdf.pdf_lookup_page_obj(fitz._as_pdf_document(destination),len(destination)-1)
+            fitz.mupdf.pdf_dict_puts(page,'Group',copied)
+    finally:destination.Graftmaps[source._graft_id]=None
+
+
 def insert_picture(page, rectangle, path):
     path = Path(path)
     if path.suffix.lower() == '.pdf':
         with fitz.open(path) as source: page.show_pdf_page(rectangle,source,0)
     else:
         with Image.open(path) as image:
+            if image.format=='JPEG' and image.mode in ('RGB','L') and image.getexif().get(274,1)==1:
+                # Preserve the original compressed photograph without a costly
+                # full-resolution PNG conversion. Rotated sources use the path below.
+                page.insert_image(rectangle,filename=str(path),keep_proportion=True)
+                return
             image = ImageOps.exif_transpose(image).convert('RGB')
             stream = io.BytesIO(); image.save(stream,format='PNG')
             page.insert_image(rectangle,stream=stream.getvalue(),keep_proportion=True)
@@ -571,8 +618,13 @@ def export_sources(case):
     for source in sources:source['sha256']=file_digest(source['path'])
     return sources
 
-def assemble(case, destination, issues=None):
+def assemble(case, destination, issues=None, cancel=None, progress=None):
     """Build PDF without Word/LibreOffice. All selected source pages are preserved."""
+    def checkpoint(message):
+        if cancel is not None and cancel.is_set():
+            raise InterruptedError('Package creation cancelled. Your previous exported files are unchanged.')
+        if progress:progress(message)
+    checkpoint('Checking the package and selected sources...')
     destination = Path(destination); destination.parent.mkdir(parents=True,exist_ok=True)
     errors = list(dict.fromkeys((issues or [])+validate(case)))
     sources=export_sources(case)
@@ -582,12 +634,15 @@ def assemble(case, destination, issues=None):
             for role in ORDER:
                 for item in case.get('package_documents',[]):
                     if item.get('role')!=role: continue
+                    checkpoint('Adding '+ROLES[role]+'...')
                     path = Path(item['path']); start=len(doc)+1
                     if path.suffix.lower()=='.pdf':
                         with fitz.open(path) as source:
                             if source.needs_pass: raise ValueError(f'Unlock PDF: {path.name}')
                             pages=parse_pages(item.get('pages'),len(source))
-                            for index in pages: doc.insert_pdf(source,from_page=index,to_page=index)
+                            for index in pages:
+                                checkpoint(f'Adding {ROLES[role]}: page {index+1}...')
+                                append_pdf_page(doc,source,index)
                     else:
                         if path.suffix.lower() not in ('.png','.jpg','.jpeg','.webp','.bmp','.tiff','.tif'):
                             raise ValueError(f'Save {path.name} as a PDF before export. Nothing was silently omitted.')
@@ -597,6 +652,7 @@ def assemble(case, destination, issues=None):
             if not any(x['section']==ROLES['invoice'] for x in manifest):
                 page=new_page(doc,'Final Invoice Missing');page.insert_text((32,100),'INCOMPLETE DRAFT - Attach and review the final invoice.',fontsize=11)
             for i,load in enumerate(case['loads'],1):
+                checkpoint(f'Adding load {i} of {len(case["loads"])}...')
                 start=len(doc)+1
                 template_load_pages(doc,load,i)
                 additional=[('Unloading / Disposal',load.get('disposal_photo')),('First 10 CYD Evidence',load.get('evidence_first_10_cyd'))]
@@ -608,19 +664,25 @@ def assemble(case, destination, issues=None):
             for key,title in [('before_photos','Before Photos'),('during_photos','During Photos'),('after_photos','After Photos')]:
                 paths=case.get(key,[])
                 if paths:
-                    start=len(doc)+1;property_photo_pages(doc,paths,title)
+                    start=len(doc)+1
+                    for offset in range(0,len(paths),9):
+                        checkpoint(f'Adding {title.lower()}: {min(offset+9,len(paths))} of {len(paths)}...')
+                        property_photo_pages(doc,paths[offset:offset+9],title)
                     manifest.append(dict(section=title,start_page=start,end_page=len(doc)))
             # Internal checks are saved separately, never printed in the package.
             if not errors:
                 (temp/'COR_Request_Description.txt').write_text(description(case),encoding='utf-8')
             report=dict(status='Items Missing' if errors else 'Complete',issues=errors,pages=len(doc),sections=manifest,sources=sources)
             doc.set_metadata({'title':f"ED COR Package - {case.get('case_number','Case')} - DRAFT",'author':'ED Package Builder'})
+            checkpoint('Finishing the PDF...')
             doc.save(temp/'package.pdf',garbage=3,deflate=True)
         finally: doc.close()
         # Refuse a mixture of old and changed source bytes, preserving the prior PDF.
         from calculator_evidence import file_digest
-        if any(file_digest(item['path'])!=item['sha256'] for item in sources):
-            raise ValueError('A source changed during export. Inspect it again before exporting.')
+        for index,item in enumerate(sources,1):
+            checkpoint(f'Verifying source {index} of {len(sources)}...')
+            if file_digest(item['path'])!=item['sha256']:
+                raise ValueError('A source changed during export. Inspect it again before exporting.')
         with fitz.open(temp/'package.pdf') as checked:
             if len(checked)!=report['pages'] or checked.needs_pass:
                 raise ValueError('The finished PDF could not be verified.')
@@ -629,6 +691,7 @@ def assemble(case, destination, issues=None):
         review=temp/'Package_Review.json'
         review.write_text(json.dumps(report,indent=2),encoding='utf-8')
         desc=destination.parent/'COR_Request_Description.txt'
+        checkpoint('Saving the verified package...')
         publish_bundle([(destination,temp/'package.pdf'),(destination.parent/review.name,review),
                         (desc,temp/desc.name if (temp/desc.name).exists() else None)])
     return report

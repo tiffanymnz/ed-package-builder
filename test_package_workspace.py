@@ -137,12 +137,32 @@ class PackageWorkspaceTests(unittest.TestCase):
             error.assert_not_called();self.assertFalse(description.exists())
             self.assertTrue(pdf.read_bytes().startswith(b'%PDF'))
 
+    def test_external_export_keeps_report_and_opens_chosen_folder(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            pdf=Path(folder)/'chosen.pdf'
+            with patch.object(self.app,'_case_temp',object()),patch('tkinter.filedialog.asksaveasfilename',return_value=str(pdf)),patch.object(self.app,'export_result') as result,patch('tkinter.messagebox.showerror') as error:
+                self.app.generate()
+            error.assert_not_called()
+            self.assertTrue(pdf.is_file())
+            self.assertEqual(json.loads(pdf.with_suffix('.review.json').read_text())['status'],'Complete')
+            self.assertIn('$1,049.65',pdf.with_suffix('.description.txt').read_text())
+            self.assertEqual(result.call_args.args[1],pdf)
+            with patch('guided_ui.sys.platform','win32'),patch('guided_ui.os.startfile',create=True) as opened:
+                self.app.open_output()
+            opened.assert_called_once_with(str(pdf.parent))
+            # A new case must not inherit the previous case's chosen folder.
+            self.app.case_dir=self.folder/'another-case';self.app.case_dir.mkdir()
+            with patch('guided_ui.sys.platform','win32'),patch('guided_ui.os.startfile',create=True) as opened:
+                self.app.open_output()
+            opened.assert_called_once_with(str(self.app.case_dir/'output'))
+
     def test_import_first_and_every_step_action_visible(self):
         self.root.geometry('900x640');self.root.update()
         for i,title in enumerate(['Import Files','Review Loads','Review Costs','Create Package']):
             self.app.go(i);self.root.update();self.assertEqual(self.app.page_title.get(),title)
             button=self.app.next_button
-            self.assertTrue(button.winfo_ismapped());self.assertLessEqual(button.winfo_rootx()+button.winfo_width(),900)
+            self.assertTrue(button.winfo_ismapped());self.assertLessEqual(button.winfo_rootx()+button.winfo_width(),self.root.winfo_rootx()+self.root.winfo_width())
         self.assertEqual(self.app.next_button.cget('text'),'Export COR Package')
         self.assertNotIn('address',self.app.vars)
         self.assertEqual(self.errors,[])
@@ -375,3 +395,4 @@ class PackageWorkspaceTests(unittest.TestCase):
         self.assertEqual(self.app.vars['invoice_amount_usd'].get(),'1200')
 
 if __name__=='__main__':unittest.main()
+

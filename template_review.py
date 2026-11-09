@@ -517,6 +517,8 @@ class TemplateReviewWindow:
     def close(self):
         if self.closed:return
         self.cleanup();self.win.destroy()
+        refresh=getattr(self.app,'refresh_load_progress',None)
+        if refresh and self.app.case is self.case:refresh()
     def cleanup(self):
         self.closed=True
         if getattr(self,'update_binding',None):

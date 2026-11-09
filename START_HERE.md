@@ -1,22 +1,19 @@
-# ED Package Builder: Start Here
+# Start Here
 
-1. **Start a case.** Enter the case number and vendor. Import the vendor folder or ZIP. You can add invoices, bids and receipts as images or PDFs.
-2. **Check documents.** Confirm which files are the invoice, bids and RBB/Bluebook. For a bid, enter its total and debris quantity. Enter a price per CYD only when that rate is shown on the bid; the app checks the arithmetic before comparing quantities.
-3. **Review loads.** Check detected load cards first. The number written by the vendor may differ from the load number in your package. If a card shows an identifiable loading stage, confirm it here once. Leave an unreadable stage unselected. A repeated container does not establish a new trip.
-4. **Check photos and measurements.** Review the grouped photos and loading sequence together, then confirm the container measurements and final fill for each load. Select the clearest supporting views for the template. If the same container was used again, its measurement photos can be shared after checking that it is the same container. Attach the cubic yard calculation. The optional rounding setting under Additional Measurement Details must match that calculation.
-5. **Review costs.** Check the Invoice Total, HUD Request Rate and whether initial services were deducted. The first-10-CYD HUD deduction is calculated from the request rate; it is not a fixed $300. Compare the bids and confirm the figures.
-6. **Create the package.** Resolve missing evidence, export the combined package and open the output folder. The package includes the selected documents and photo template, not just loose photos.
+1. **Create a case.** Enter the case number and vendor. Import the vendor folder or ZIP. Add more files whenever needed.
+2. **Confirm the documents.** Open the invoice, bids and RBB/Bluebook rows and confirm their purpose. Use page ranges for a combined PDF. On bids, enter the printed total and debris quantity; enter a price per CYD only when it is shown. Exclude replaced invoice versions, or keep all attachments when they make up one final bill.
+3. **Review the loads.** Check readable load cards first when supplied. Use Organize Photos to review groups and select the load or property stage. Similar containers can belong to different trips. Use the load summary's Review Selected Load action to fill its template. Check the container details, final fill and supporting measurement photos, then attach the cubic yard calculation. A repeated or changed source appears as an item to review.
+4. **Review costs.** Compare the invoice with the original files and photo-supported measurements. Confirm whether initial services were deducted. The HUD first-10-CYD allowance is calculated at the request rate; it is not a fixed $300 vendor credit. Confirm the lowest received bid after checking all bids.
+5. **Create the package.** Select any remaining issue to read its full details and open its step. Export the combined PDF. Progress shows the current operation; Cancel preserves your previous saved files. The completion screen opens the actual PDF or its folder. A `.description.txt` file is saved only when checks pass; a matching `.review.json` stays outside the PDF.
 
-**Need to stop?** Use **Save Project** to save an `.edcase` file containing your originals and progress. Open it later to resume. Downloading a PDF does not save an editable project.
+**Save your progress:** Save Project creates a portable `.edcase` with originals and review decisions. Open it later to resume. Opening a large project shows progress and can be cancelled. Exporting a PDF does not save an editable project. New cases use a temporary session, so use Save Project before leaving.
 
-Photo sorting runs locally. Checked Before, During and After examples can help suggest similar photos in the current case. Dates support ordering; filenames and timestamps do not establish a work stage. Uncertain load identities and loading stages still require a decision.
+**Photo review:** Choose 6, 12 or 24 photos per page. Your selections remain checked when switching layouts. Check the source photo before accepting a category, stage, load or template placement. Unclear results remain available for review. A loading card takes priority over contradictory invoice typing; resolve conflicting source evidence before confirming measurements.
 
-**Large photo sets:** Photos per Page offers 6, 12 or 24 views. Selection stays checked when switching layouts. Photo grids scroll instead of shrinking all views to fit. Use Group This Trip after selecting its first and last container photo and choosing its load. Both endpoints need an explicit date/time from the same clock source. Open the resulting trip group, inspect its photos, then apply the load only to checked photos. Time-only groups do not fill template boxes. Undo Last Batch reverses the last review action when no later review or source changes conflict.
+**Reused containers:** Group This Trip uses checked first and last container photos with explicit times from the same clock source. Inspect the resulting group and apply the load only to checked photos. Time-only groups do not fill template boxes. Shared measurement photos need confirmation that they show the same container. Undo Last Batch reverses the latest compatible batch action.
 
-**Measurement close-up:** Open a photo, use Tape Detail to navigate to a possible tape region, then inspect both endpoints. This does not read or invent dimensions.
+**Need a closer look?** Open the source photo to zoom, rotate or compare. Tape Detail navigates to a possible tape region; check both endpoints. It does not invent a dimension.
 
-**Recovery:** Tools → Recover Interrupted Export restores previous exports after an interrupted write. Tools → Storage and Performance shows local aggregate storage and cached review-preparation timings.
+**Recover an interrupted export:** Tools > Recover Interrupted Export restores the previous complete export set. Tools > Storage and Performance shows local storage and cached review-preparation timing, which is not staff-efficiency timing.
 
-**Hidden a card by mistake?** In Review Load Cards, turn on Show Hidden Cards, inspect the card, then confirm its number and package load to restore it.
-
-**Several invoice attachments?** Open each one in Review Costs. Use Choose Final Invoice Version to exclude earlier copies while retaining their originals. If all attachments make up one bill, choose Keep These Attachments as the Final Bill and verify the combined total once, without repeating the Initial Services deduction.
+**Hidden a card?** Review Load Cards > Show Hidden Cards lets you inspect and restore it.

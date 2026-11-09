@@ -123,13 +123,18 @@ def export_project(case,root,destination,cancel=None,progress=None):
     finally:
         if Path(temporary).exists():Path(temporary).unlink()
 
-def import_project(source,root):
+def import_project(source,root,cancel=None,progress=None):
+    def checkpoint(message):
+        if cancel is not None and cancel.is_set():raise InterruptedError('Opening cancelled. Your saved project is unchanged.')
+        if progress:progress(message)
+    checkpoint('Checking the saved project...')
     root=Path(root).resolve();root.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(source) as archive:
         entries=archive.infolist()
         if len(entries)>20000:raise ValueError('Project contains too many files.')
         seen=set();total=0
         for item in entries:
+            checkpoint('Checking project contents...')
             path=PurePosixPath(item.filename)
             if path.is_absolute() or '..' in path.parts or ':' in str(path) or '\\' in str(path) or stat.S_ISLNK(item.external_attr>>16):raise ValueError('Unsafe project archive path.')
             reserved={'CON','PRN','AUX','NUL'}|{f'COM{i}' for i in range(1,10)}|{f'LPT{i}' for i in range(1,10)}
@@ -150,10 +155,12 @@ def import_project(source,root):
         for item in entries:
             path=PurePosixPath(item.filename)
             if item.is_dir() or not path.parts or path.parts[0]!='files':continue
+            checkpoint('Opening saved source files...')
             if str(PurePosixPath(*path.parts[1:])) not in manifest:raise ValueError('Project contains an unexpected file.')
             relative=PurePosixPath(*path.parts[1:]);target=root.joinpath(*relative.parts);target.parent.mkdir(parents=True,exist_ok=True)
             with archive.open(item) as incoming,target.open('wb') as outgoing:shutil.copyfileobj(incoming,outgoing)
-        for relative,expected in manifest.items():
+        for index,(relative,expected) in enumerate(manifest.items(),1):
+            checkpoint(f'Verifying source {index} of {len(manifest)}...')
             candidate=root/relative
             if not candidate.resolve().is_relative_to(root) or not candidate.is_file() or file_digest(candidate)!=expected:raise ValueError('A project file did not match its saved contents.')
         if envelope.get('bid_confirmation_valid'):
@@ -167,5 +174,6 @@ def import_project(source,root):
             source=Path(path)
             if source.is_file() and record.get('source_mtime_ns'):
                 os.utime(source,ns=(source.stat().st_atime_ns,int(record['source_mtime_ns'])))
+        checkpoint('Restoring your progress...')
         (root/'case.json').write_text(json.dumps(case,indent=2),encoding='utf-8')
         return case

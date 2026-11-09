@@ -70,7 +70,15 @@ class PackageApp(GuidedApp):
 
     def update_guide(self):
         super().update_guide()
+        if self.current_step()==1:self.refresh_load_progress()
         if self.current_step()==3: self.next_button.configure(text='Export COR Package')
+
+    def refresh_load_progress(self):
+        tree=getattr(self,'load_progress',None)
+        if not self.case or tree is None or not tree.winfo_exists():return
+        from workflow_status import package_inventory
+        for row in package_inventory(self.case):
+            if row['kind']=='template' and tree.exists(str(row['load'])):tree.item(str(row['load']),values=(row['detail'],))
 
     def open_original(self,path):
         if not path:messagebox.showinfo('Select a Photo','Select a source photo first.');return
@@ -103,6 +111,7 @@ class PackageApp(GuidedApp):
         return True
 
     def save_project(self):
+        if getattr(self,'_file_task_running',False):return False
         if not self.require():return False
         if self.finish_photo_work(self.save_project):return False
         if any(window.running for window in getattr(self,'_photo_sorting_windows',[])) or self.scan_running:
@@ -126,6 +135,7 @@ class PackageApp(GuidedApp):
         except Exception as exc:messagebox.showerror('Cannot Save Project',str(exc));return False
 
     def prepare_leave(self):
+        if getattr(self,'_file_task_running',False):return False
         service=self._background_photos
         if service and service.case is self.case:service.cancel.set()
         if service and service.running:
@@ -152,6 +162,7 @@ class PackageApp(GuidedApp):
         if self._case_temp is not None:self._case_temp.cleanup();self._case_temp=None
 
     def open_case(self):
+        if getattr(self,'_file_task_running',False):return
         if self.finish_photo_work(self.open_case):return
         import tempfile
         from portable_project import import_project,fingerprint
@@ -162,12 +173,19 @@ class PackageApp(GuidedApp):
         try:
             self.status.set('Opening project...');self.root.update_idletasks()
             if Path(path).suffix.lower()=='.edcase':
-                owner=tempfile.TemporaryDirectory(prefix='ed-project-');directory=Path(owner.name);case=import_project(path,directory)
+                owner=tempfile.TemporaryDirectory(prefix='ed-project-');directory=Path(owner.name)
+                from background_task import run_file_task
+                self._file_task_running=True
+                try:case=run_file_task(self.root,'Opening Project',lambda cancel,progress:import_project(path,directory,cancel=cancel,progress=progress))
+                finally:self._file_task_running=False
             else:directory=Path(path).parent;case=json.loads(Path(path).read_text(encoding='utf-8'))
             self.release_temporary_case();self.case=case;self.case_dir=directory;self._case_temp=owner
             self._project_file=Path(path) if owner else None;self.vars={};self.refresh();self.go(0)
             self._saved_project_fingerprint=fingerprint(self.case,self.case_dir) if owner else None
             if owner:self.status.set('Project opened · Temporary session. Use Save Project to keep changes.')
+        except InterruptedError:
+            if owner:owner.cleanup()
+            self.status.set('Opening cancelled. Your current case is still open.')
         except Exception as exc:
             if owner:owner.cleanup()
             messagebox.showerror('Cannot Open Project',str(exc))
@@ -182,6 +200,7 @@ class PackageApp(GuidedApp):
         RUNTIME.stop()
 
     def new_case(self):
+        if getattr(self,'_file_task_running',False):return
         if self.finish_photo_work(self.new_case):return
         if self.case: self.save()
         win=tk.Toplevel(self.root);win.title('New Case');win.geometry('480x330');win.transient(self.root);win.grab_set()
@@ -511,22 +530,47 @@ class PackageApp(GuidedApp):
         if not self.case:return
         legacy=list(self.evidence_tab.winfo_children())
         for child in legacy:child.pack_forget()
-        row=ttk.Frame(self.evidence_tab,padding=(0,0,0,10))
+        surface=ttk.Frame(self.evidence_tab);surface.pack(fill='both',expand=True)
+        content=self.scroll_page(surface)
+        row=ttk.Frame(content,padding=(0,0,0,10))
         row.pack(fill='x')
         ttk.Button(row,text='Review Load Cards',command=self.review_load_cards).pack(side='left',padx=(0,8))
         ttk.Button(row,text='1 · Organize Photos',style='Primary.TButton',command=self.organize_photos).pack(side='left')
         ttk.Button(row,text='2 · Fill Template',command=self.template_photo_review).pack(side='left',padx=8)
-        ttk.Button(row,text='Container Details',command=self.measurements).pack(side='left',padx=8)
-        options=ttk.Menubutton(row,text='More');menu=tk.Menu(options,tearoff=False);options.configure(menu=menu);options.pack(side='right')
+        details=ttk.Frame(content,padding=(0,0,0,10));details.pack(fill='x')
+        ttk.Button(details,text='Container Details',command=self.measurements).pack(side='left')
+        options=ttk.Menubutton(details,text='More');menu=tk.Menu(options,tearoff=False);options.configure(menu=menu);options.pack(side='right')
         menu.add_command(label='Advanced Photo Review',command=self.visual_photo_review)
         def manual():
             for child in list(self.evidence_tab.winfo_children()):
                 if child not in legacy:child.pack_forget()
             for child in legacy:child.pack(fill='both',expand=True)
         menu.add_command(label='Manual Photo Assignment',command=manual)
-        card=self.card(self.evidence_tab,'Review the Cards, Then the Photos','If the vendor supplied load cards, confirm them first. Review each suggested group, then choose the clearest evidence for the template.')
-        ttk.Label(card,text='Photo sorting and text reading run locally in the background. Dates can help with order; they do not prove a load number or fill level.',wraplength=780,style='Card.TLabel').pack(anchor='w',pady=12)
-        ttk.Label(card,text='Same container, different loads? Keep the loads separate. Compare loading progress, visible load cards and any available date/time clues.',wraplength=780,style='Card.TLabel',foreground=MUTED).pack(anchor='w')
+        card=self.card(content,'Review the Cards, Then the Photos','If the vendor supplied load cards, confirm them first. Review each suggested group, then choose the clearest evidence for the template.')
+        instructions=card
+        for text,muted in [('Photo sorting and text reading run locally in the background. Use the visible load cards and loading progress to confirm each trip.',False),('Same container, different loads? Keep the trips separate. Dates can help with order, but a date alone does not establish the trip or fill level.',True)]:
+            label=ttk.Label(card,text=text,wraplength=580,style='Card.TLabel',foreground=MUTED if muted else guided_ui.INK)
+            label.pack(anchor='w',fill='x',pady=(12,0))
+            label.bind('<Configure>',lambda event,w=label:w.configure(wraplength=max(180,event.width)),add='+')
+        from workflow_status import package_inventory
+        loads=[r for r in package_inventory(self.case) if r['kind']=='template']
+        card=self.card(content,'Loads in This Package','Select a load to continue where its evidence needs attention.')
+        card.pack_configure(before=instructions)
+        listing=ttk.Frame(card,style='Card.TFrame');listing.pack(fill='x',pady=(10,8))
+        self.load_progress=ttk.Treeview(listing,columns=('next',),show='tree headings',height=min(6,max(1,len(loads))),selectmode='browse')
+        tree=self.load_progress;tree.heading('#0',text='Load');tree.heading('next',text='Next Action')
+        tree.column('#0',width=90,minwidth=70,stretch=False);tree.column('next',width=420,minwidth=180)
+        scroll=ttk.Scrollbar(listing,command=tree.yview);scroll.pack(side='right',fill='y');tree.configure(yscrollcommand=scroll.set);tree.pack(fill='x')
+        for item in loads:tree.insert('','end',iid=str(item['load']),text=item['label'],values=(item['detail'],))
+        def choose(event=None):
+            if tree.selection():self.e_load.set(tree.selection()[0])
+        def resume(event=None):
+            choose();self.template_photo_review()
+        tree.bind('<ButtonRelease-1>',choose);tree.bind('<KeyRelease>',choose);tree.bind('<Double-1>',resume)
+        current=self.e_load.get()
+        if current in tree.get_children():tree.selection_set(current)
+        elif tree.get_children():tree.selection_set(tree.get_children()[0])
+        ttk.Button(card,text='Review Selected Load',style='Primary.TButton',command=resume).pack(anchor='e',pady=(6,0))
 
     def measurements(self):
         self.save();index=int(self.e_load.get())-1;load=self.case['loads'][index]
@@ -565,6 +609,7 @@ class PackageApp(GuidedApp):
             except Exception as exc:messagebox.showwarning('Measurements Need Review',str(exc),parent=win);return False
             load.update(proposed);load['include_supporting_measurements']=supporting.get();load['measurements_confirmed']=True;self.case['bid_review_confirmed']=False
             self.save();result.configure(text=f'Confirmed: {calculated["total"]:.2f} CYD')
+            self.refresh_load_progress()
             if close:win.destroy()
             return True
         row=ttk.Frame(body);row.pack(fill='x',pady=8)
@@ -854,6 +899,13 @@ class PackageApp(GuidedApp):
         scroll=ttk.Scrollbar(body,command=tree.yview);scroll.pack(side='right',fill='y')
         horizontal=ttk.Scrollbar(body,orient='horizontal',command=tree.xview);horizontal.pack(side='bottom',fill='x')
         tree.configure(yscrollcommand=scroll.set,xscrollcommand=horizontal.set);tree.pack(fill='both',expand=True)
+        detail=ttk.Label(self.check_tab,text='Select an item to read the full details, then open its step.',wraplength=580,justify='left')
+        detail.pack(fill='x',pady=(10,0))
+        detail.bind('<Configure>',lambda event:detail.configure(wraplength=max(180,event.width)),add='+')
+        def selected(event=None):
+            rows=tree.selection()
+            detail.configure(text=tree.item(rows[0],'text') if rows else 'Select an item to read the full details, then open its step.')
+        tree.bind('<<TreeviewSelect>>',selected)
         tree.bind('<Double-1>',lambda event:self.resolve_issue())
         self.show_checks()
 
@@ -866,8 +918,30 @@ class PackageApp(GuidedApp):
         def copy():self.root.clipboard_clear();self.root.clipboard_append(text)
         ttk.Button(win,text='Copy Description',command=copy).pack(anchor='e',padx=20,pady=12)
 
+    def export_result(self,report,pdf):
+        win=tk.Toplevel(self.root);win.title('Package Saved');win.transient(self.root)
+        fit_window(win,self.root,(660,420),(500,320))
+        body=ttk.Frame(win,padding=26);body.pack(fill='both',expand=True)
+        complete=report['status']=='Complete'
+        ttk.Label(body,text='Your Package Is Saved' if complete else 'Your Draft Is Saved',font=(self.ui_font,21,'bold')).pack(anchor='w')
+        detail=f'{report["pages"]} pages · All package checks passed.' if complete else f'{report["pages"]} pages · {len(report["issues"])} items still need attention.'
+        ttk.Label(body,text=detail,style='Muted.TLabel',wraplength=580).pack(anchor='w',pady=(8,20))
+        ttk.Label(body,text=pdf.name,font=(self.ui_font,11,'bold'),wraplength=580).pack(anchor='w')
+        ttk.Label(body,text=str(pdf.parent),style='Muted.TLabel',wraplength=580).pack(anchor='w',pady=(6,16))
+        note='The request description is saved beside the PDF.' if complete else 'Return to Create Package to resolve the remaining items. A request description is saved only when the checks pass.'
+        ttk.Label(body,text=note,wraplength=580,justify='left').pack(anchor='w')
+        actions=ttk.Frame(body);actions.pack(side='bottom',fill='x',pady=(20,0))
+        ttk.Button(actions,text='Open PDF',style='Primary.TButton',command=lambda:self.open_original(pdf)).pack(side='left')
+        ttk.Button(actions,text='Open Folder',command=self.open_output).pack(side='left',padx=10)
+        def finish():
+            win.destroy()
+            if not complete:self.go(3)
+        ttk.Button(actions,text='Done' if complete else 'Review Remaining Items',command=finish).pack(side='right')
+
     def generate(self):
+        if getattr(self,'_file_task_running',False):return
         if not self.require():return
+        if self.finish_photo_work(self.generate):return
         self.save();issues=self.evaluate()[3]
         if issues and not messagebox.askyesno('Incomplete Package','Some items still need review. Export the available documents anyway? Missing items remain listed in the app and will not be printed in the PDF.'):return
         destination=None
@@ -878,13 +952,30 @@ class PackageApp(GuidedApp):
                 messagebox.showwarning('Choose a Saved Location','Choose a folder outside the temporary workspace so the exported PDF stays saved.');return
         folder=self.case_dir/'output';folder.mkdir(exist_ok=True)
         try:
-            report=assemble(self.case,folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf'),issues)
-            if destination:
-                from export_bundle import publish_bundle
-                text=folder/'COR_Request_Description.txt'
-                publish_bundle([(Path(destination),folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf')),
-                                (Path(destination).with_suffix('.description.txt'),text if text.is_file() else None)])
-                self.status.set('Package saved: '+str(destination))
-            messagebox.showinfo('Package Exported',f"{report['pages']} Pages Assembled\nStatus: {report['status']}\n\nUse Open Output Folder to find the PDF and review report. The request description is saved when all checks are resolved.")
-            if not destination:self.open_output()
+            import copy
+            from background_task import run_file_task
+            snapshot=copy.deepcopy(self.case)
+            def create_package(cancel,progress):
+                staged=folder/(safe(snapshot['case_number'])+'_COR_PACKAGE_DRAFT.pdf')
+                report=assemble(snapshot,staged,issues,cancel=cancel,progress=progress)
+                if destination:
+                    if cancel.is_set():raise InterruptedError('Package creation cancelled.')
+                    from export_bundle import publish_bundle
+                    progress('Saving to your chosen folder...')
+                    text=folder/'COR_Request_Description.txt'
+                    publish_bundle([(Path(destination),staged),
+                                    (Path(destination).with_suffix('.description.txt'),text if text.is_file() else None),
+                                    (Path(destination).with_suffix('.review.json'),folder/'Package_Review.json')])
+                return report
+            self._file_task_running=True
+            try:report=run_file_task(self.root,'Creating COR Package',create_package)
+            finally:self._file_task_running=False
+            if destination:self.status.set('Package saved: '+str(destination))
+            self._last_export_case_dir=self.case_dir
+            self._last_export_folder=Path(destination).parent if destination else folder
+            saved_pdf=Path(destination) if destination else folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf')
+            self.status.set('Package saved: '+str(saved_pdf))
+            self.export_result(report,saved_pdf)
+        except InterruptedError:self.status.set('Package creation cancelled. Your previous saved package is unchanged.')
         except Exception as exc:messagebox.showerror('Package Export Failed',str(exc))
+

@@ -1,53 +1,42 @@
-# ED Package Builder v51 — Measured Results and Release Gate
+# v52 Source Candidate - Release Validation
 
-Status: source candidate, not a replacement Windows release. v50 remains the last Windows-tested release. The user approved the 7.49 MiB annotation reader on November 8, 2026. It is now bundled in this source candidate; Windows validation remains pending.
+November 9, 2026. Prepared for review; not a replacement Windows release yet.
 
-## Fresh source-photo evaluation
+## Final software checks
 
-Reference labels were frozen before inspecting this run's predictions. The 88-photo set has not been established as wholly unseen during historical training; these results do not establish accuracy on new properties or handwriting styles.
+445 source and desktop tests passed with no skips on the local Linux test host with a graphical display. This includes actual app export, selected-load navigation, saved-file actions, cancelled export/import, UI event processing during export, source changes, invoice arithmetic, duplicate evidence, portable projects, export corruption rollback and same-computer concurrent-export refusal. The final modified source has not run as a Windows frozen executable.
 
-| Check | Result | Interpretation |
-|---|---|---|
-| Broad photo purpose, 88 originals | 77 suggestions; 76 matched checked labels; 11 withheld | One pile close-up incorrectly suggested as a measurement. Some references accept both visible container and measurement content. |
-| Before/After, 49 confidently labeled property scenes | 35 suggestions matched; 14 withheld | Another 12 ambiguous property scenes are unscored. No claim about their predictions. |
-| Three handwritten loading-stage annotations | v50 recovered 0; v51 optional reader recovered 3 | Quarter, Half and Full; very small development sample, not general handwriting accuracy. |
-| Template proposal given explicitly checked load membership | Quarter, Half and Full proposed in corresponding boxes | Empty, Three Quarters and a second Full view left unfilled; no invented trip labels or duplicate photo placement. |
-| Fresh current-reader scan, 336 originals | 157 candidates; no readable load-number results | Source sample lacks readable physical-trip cards. Prior cached replay did not establish this reader's current accuracy. |
-| Compact reader on 12 load cards plus 53 controls | 0 recovered load cards; 0 false positives on controls | Rejected as a replacement for the existing load-card reader. |
-| Experimental feature matching of reused containers | 0 correct, 1 wrong, 29 unresolved on nonseed references | Rejected; not included in app. |
-| Similar-view review assistance on 88-photo set | Two property-review groups containing 7 unresolved photos | Review convenience only, not verified stage/trip assignments. Not a measured staff time saving. |
+The prior v51 Windows run 42540173292 passed 432 tests with no skips, plus frozen photo, load/annotation reader, interface and executable checks. Its head was 3f7fda5d40026d83fd3bcc43ab454cacc4fa34e6; PR merge checkout e532b10536366f7d183f85032285dc82940b1aa7. Portable archive SHA-256: e25ff0b2a2b06e979ce5d2fd1d15e6d24cdcc1f9f15ecc8af89ee1b43ba39efd. That archive does not contain v52 changes.
 
-No source photographs were uploaded to public model services. Existing model assets were used locally. Developer-host speed is not work-laptop speed.
+## Real-source package comparison
 
-## Candidate changes
+Four supplied completed examples were reconstructed using their existing invoice, bid, RBB, calculator, measurement, progression and receipt sources. All 309 selected extracted source images were found in the generated PDFs by decoded-image hashes. All 13 imported financial pages retained their original text and exact rendered pixels. The four generated PDFs total 73 pages, including an extra supporting view in one case. Rendered load and property-grid pages were inspected.
 
-- Detect large annotations above embedded scene photos; parse stage evidence independently of load numbers.
-- Optional compact handwriting reader uses the existing inference runtime; 7,850,705 bytes (7.49 MiB) extra model data. The approved model is bundled with the app, with no extra installation or copied model cache. No Paddle runtime is included.
-- Fraction preprocessing aligns existing visible glyphs; it does not add or substitute digits. Plain digits and dimensional text are rejected as stage fractions. Conflicting stage claims are withheld.
-- Stage-only evidence can assist template proposals after source-checked load assignment, with explicit user confirmation before placement.
-- Similar-view review batches use fixed representative similarity, date/category boundaries, and source checks. They never assign physical trips or stages.
-- Load-card hints reject outdated model versions or changed sources; dismissed cards remain accessible for restoration.
-- Export read-back integrity checks and a same-computer export lock protect against corrupted copies and simultaneous writes.
-- Removed the irrelevant $45/CYD exception from pending requirements. No active $45 policy trigger was present. Exact $2,500 boundary and gross/net basis remain unspecified by policy owner.
+This is reference-directed assembly, not independently verified physical-trip reconstruction. The examples are not clean acceptance baselines: duplicate photos occupy multiple loading stages in some examples, and one invoice states 48.84 CYD while its three calculator screenshots total 48.64 CYD. The software flags these conflicts and withholds a conflicting financial description. Explicitly reviewed during-removal, unloading and first-10 evidence was not invented to force a Complete result. A higher-value example also provides only one of the three required bids. These unresolved examples remain drafts.
 
-## Verification
+## Broader raw-photo check
 
-431 source tests: 359 passed, 72 GUI tests skipped because no graphical display was available. The fraction negative controls, source immutability, changed-source rejection, batch grouping boundaries, export corruption rollback and concurrent-export refusal passed. Windows frozen-executable and GUI validation must run before a v51 Windows release. No new end-to-end staff time or first-use usability result is claimed.
+60 photos from five supplied submissions were visually labeled before this run's predictions. Five ambiguous broad-purpose references were excluded; 55 were scored. The historical training/development exposure of these properties is unknown, so this does not establish untouched new-property accuracy.
 
-## Export recovery, in plain language
+| Version | Suggestions made | Correct suggestions | Wrong suggestions | Withheld |
+|---|---:|---:|---:|---:|
+| Previous category behavior | 28 | 25 | 3 | 27 |
+| Final measurement control | 25 | 25 | 0 | 30 |
 
-The PDF and separate description/report cannot appear at precisely the same instant as one file-system operation. An interruption can briefly leave files from different exports. The journal restores the previous complete set when recovery runs. The candidate additionally checks the bytes written and prevents two app instances on the same computer from exporting to the same folder simultaneously. Physical drive damage, destroyed backups and storage devices that falsely report successful durable writes cannot be guaranteed recoverable. This is not a promise of cross-computer locking on network shares.
+The three removed suggestions were a spray can and two lock close-ups classified as measurements. Text-only competing-object controls add no runtime model download and do not assign any category, trip or template slot. The tradeoff is that two additional reference tape photos were withheld: 30 of 36 reference tape photos received measurement suggestions, versus 32 previously. The guard was developed against these errors; it needs independent validation rather than a universal accuracy claim. Thirty withheld results on the 55 scored examples are still review work. No overall 100% accuracy or measured staff saving is claimed.
 
-## Remaining release gates
+## Large export and usability
 
-1. Storage approval is complete. The bundled reader passed a direct CPU inference check; its small handwriting benchmark supports a narrow benefit, not broad load-card improvement.
-2. Windows packaging and GUI regression validation after the final asset decision.
-3. Independently checked photos from additional properties and handwriting styles to establish generalization. Existing examples cannot prove that.
-4. Work-laptop and first-time staff trial to measure actual effort saved.
-5. Authoritative $2,500 boundary and gross/net basis. Do not invent a policy answer.
+The same synthetic 1,000-photo/130-page export improved from 26.06 seconds to 1.427 seconds after preserving ordinary JPEG compression. The PDF shrank from 18,875,331 to 8,142,387 bytes. Peak process RSS for the optimized check was about 76 MB. Portable save/resume preserved all 1,000 selected property-photo sources. These are developer-host results on small synthetic images, not work-laptop, full-resolution vendor-image, model-inference or staff-efficiency measurements.
 
-Unclear reused-container trips remain a review decision unless distinct source-bound evidence supports them. No threshold was relaxed to force assignments.
+The four main pages and the saved-package screen were inspected at desktop size. The load summary is scrollable, instructions wrap, selected issues expose their full text, and export actions remain available in the footer. Automated window, grid and navigation checks passed. A first-time staff walkthrough has not been performed.
 
-## Approved integration verification
+## Remaining acceptance gates
 
-The bundled model hash and Apache license passed checks. A direct CPU inference read synthetic Full text correctly without copying the model into a user cache. The Windows build now bundles these assets, and its frozen card-reader test exercises the annotation model. Reader cache version advanced to 7 so prior no-annotation results do not prevent reanalysis. Windows CI has not yet run for this candidate.
+1. Publish the reviewed source only after push authorization/access is available, then run the matching Windows workflow and test its frozen reader, interface, source modules and export. Do not relabel v51 as v52.
+2. Resolve source-evidence and invoice conflicts in a real acceptance case. Do not invent photographs, trip relationships or supporting bids.
+3. Use independently checked positive examples from genuinely new properties and handwriting styles to measure generalization. Current development and regression samples cannot establish that result.
+4. Run a first-time workflow on the work laptop, checking usability, output correctness, review effort and elapsed time against the existing process.
+5. Confirm the exact $2,500 boundary and gross-versus-net basis. The user deferred this answer. Existing conservative behavior and RBB requirements remain; no $45/CYD rule was introduced.
+
+Similar-looking reused containers still require distinct source evidence or an explicit review decision. No threshold was relaxed to force physical-trip or stage assignments. No source photographs, property records, embeddings or private audit data belong in the repository update.

@@ -1,5 +1,12 @@
-# v50: Batch Review, Invoice Versions and Export Recovery
+# v52 - Smoother Review, Reliable Export and Further Validation
 
-Adds readable scrollable photo grids, work-area-aware main/review windows, guarded batch undo, checked trip-window review groups, explicit final-invoice versions, portable combined-invoice confirmation, interrupted-export recovery, tape-region navigation and local aggregate diagnostics. Split-line load labels and Unicode fractions are supported. No new model assets.
+- Project opening and package export now run off the interface thread, show progress and support cancellation. A case cannot be changed or exported twice during a file operation.
+- Review Loads has a scrollable load summary with the next action and a direct Review Selected Load button. Repeated loading photos are identified in the summary; it refreshes after template review.
+- Long instructions wrap within the available width. The final checks show readable photo issues with full selected-row details.
+- The saved-package screen opens the actual PDF or output folder and offers a direct return to remaining items for an incomplete draft.
+- Exports to a chosen folder keep the PDF, description when complete and review report together.
+- Ordinary JPEG photos retain their original compressed bytes; EXIF-rotated images remain upright. Imported PDF transparency color groups are preserved.
+- Request descriptions recheck invoice arithmetic independently of a saved confirmation flag.
+- Text-only measurement controls withhold confusing handheld-object suggestions. They add about 81 KB of source data and require no new deployed model. The photo-analysis cache version changes so previous suggestions are rechecked.
 
-Windows run #27: 417 tests passed with no skips. Frozen photo reader, card reader, interface, taskbar-boundary and export checks passed. Recognition coverage and first-time staff efficiency remain limited and unproven on new properties; see RELEASE_VALIDATION.md.
+All 445 local source/desktop checks passed without skips. Matching Windows packaging remains required. See RELEASE_VALIDATION.md for measured results and outstanding acceptance work.
