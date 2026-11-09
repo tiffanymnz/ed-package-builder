@@ -14,6 +14,13 @@ class ReviewAssistanceTests(unittest.TestCase):
   from related_review import related_groups
   before=copy.deepcopy(self.case);out=related_groups(self.case,self.rows);self.assertEqual(len(out),5);self.assertEqual(before,self.case)
   for p in out.values():self.assertTrue(p['review_only']);self.assertIsNone(p['load']);self.assertFalse(p['verified'])
+ def test_unsorted_similar_views_can_be_reviewed_without_category_assignment(self):
+  from related_review import related_groups
+  for row in self.rows:row['category']='other'
+  before=copy.deepcopy(self.case);out=related_groups(self.case,self.rows)
+  self.assertEqual(len(out),5);self.assertEqual(before,self.case)
+  self.assertTrue(all(v['group_label'].startswith('Similar Unsorted Views') and v['review_only'] for v in out.values()))
+  self.assertTrue(all(row['category']=='other' for row in self.rows))
  def test_date_and_category_boundaries_do_not_merge(self):
   from related_review import related_groups
   self.rows[3]['sequence_date']='2026-07-20';self.rows[4]['category']='property_photos';out=related_groups(self.case,self.rows);self.assertEqual(set(out),{r['path'] for r in self.rows[:3]})
@@ -66,9 +73,10 @@ class ExportIntegrityTests(unittest.TestCase):
    def replace(a,b):
     nonlocal corrupted
     original(a,b)
-    if Path(b)==pdf and not corrupted:Path(b).write_bytes(b'corrupt');corrupted=True
+    if Path(b).resolve()==pdf.resolve() and not corrupted:Path(b).write_bytes(b'corrupt');corrupted=True
    with patch('export_bundle.os.replace',side_effect=replace):
     with self.assertRaises(RuntimeError):publish_bundle([(pdf,src),(text,note)])
+   self.assertTrue(corrupted,'The fault injection must reach the actual published path')
    self.assertEqual(pdf.read_bytes(),b'old pdf');self.assertEqual(text.read_bytes(),b'old text')
  def test_concurrent_export_cannot_touch_previous_pdf(self):
   from export_bundle import folder_lock,publish_bundle

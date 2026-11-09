@@ -6,7 +6,7 @@ from calculator_evidence import file_digest
 def related_groups(case,rows):
  imported={r['path'] for r in case.get('imported_files',[])}
  documents={d.get('path') for d in case.get('package_documents',[]) if d.get('confirmed') and d.get('role')!='exclude'}
- families={'container_photos':'Container','property_photos':'Property','measurement':'Measurement'}
+ families={'container_photos':'Container','property_photos':'Property','measurement':'Measurement','other':'Unsorted'}
  groups=[]
  for row in sorted(rows,key=lambda r:r['sha256']):
   family=families.get(row.get('category'));vector=row.get('embedding');path=row['path']
