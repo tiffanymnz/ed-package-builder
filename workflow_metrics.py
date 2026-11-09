@@ -1,5 +1,5 @@
 """Local aggregate diagnostics; no filenames, photo text or outbound telemetry."""
-import os,platform,shutil,time
+import os,platform,shutil,time,sys
 from pathlib import Path
 
 def folder_bytes(folder):
@@ -21,4 +21,5 @@ def measure(case,directory):
  if len(rows)!=len(warm):raise ValueError('Photo count changed during measurement.')
  from small_vision_runtime import RUNTIME
  base=Path(os.environ.get('LOCALAPPDATA',Path.home()/'.local'/'share'))/'EDPackageBuilder'
- return dict(photos=len(rows),analyzed_photos=sum(r.get('embedding') is not None for r in rows),cold_seconds=round(cold,3),cached_seconds=round(cached,3),project_mb=round(folder_bytes(directory)/1048576,1),model_mb=round((folder_bytes(base/'LoadTextReader')+folder_bytes(RUNTIME.root))/1048576,1),free_disk_mb=round(shutil.disk_usage(directory).free/1048576),logical_cpus=os.cpu_count(),system=platform.system(),machine=platform.machine(),note='Measures cached photo-review preparation on this computer. It does not measure model processing, sorting accuracy or human review time.')
+ bundled=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))/'assets'/'handwriting'
+ return dict(photos=len(rows),analyzed_photos=sum(r.get('embedding') is not None for r in rows),cold_seconds=round(cold,3),cached_seconds=round(cached,3),project_mb=round(folder_bytes(directory)/1048576,1),model_mb=round((folder_bytes(base/'LoadTextReader')+folder_bytes(RUNTIME.root)+folder_bytes(bundled))/1048576,1),free_disk_mb=round(shutil.disk_usage(directory).free/1048576),logical_cpus=os.cpu_count(),system=platform.system(),machine=platform.machine(),note='Measures cached photo-review preparation on this computer. It does not measure model processing, sorting accuracy or human review time.')
