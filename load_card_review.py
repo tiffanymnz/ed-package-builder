@@ -17,12 +17,12 @@ class CardReviewWindow:
         ttk.Button(footer,text='Review Photo Groups',command=self.groups).pack(side='right')
         ttk.Button(footer,text='Confirm Load Card',style='Primary.TButton',command=self.confirm).pack(side='right',padx=8)
         controls=ttk.Frame(body);controls.pack(fill='x',pady=(0,10))
-        ttk.Label(controls,text='Number on Card').pack(side='left');self.vendor_number=tk.StringVar()
+        ttk.Label(controls,text='Number on Card (If Shown)').pack(side='left');self.vendor_number=tk.StringVar()
         ttk.Spinbox(controls,from_=1,to=150,textvariable=self.vendor_number,width=6).pack(side='left',padx=(8,16))
         ttk.Label(controls,text='Package Load').pack(side='left');self.number=tk.StringVar()
         ttk.Spinbox(controls,from_=1,to=150,textvariable=self.number,width=6).pack(side='left',padx=8)
         stage_controls=ttk.Frame(body);stage_controls.pack(fill='x',pady=(0,10))
-        ttk.Label(stage_controls,text='Loading Stage Shown on Card').pack(side='left')
+        ttk.Label(stage_controls,text='Loading Stage Shown').pack(side='left')
         self.stage=tk.StringVar(value='Not Clear / Not Shown')
         self.stage_names={'Not Clear / Not Shown':None,'Empty':'empty','Quarter Full':'quarter','Half Full':'half','Three Quarters Full':'three_quarters','Full':'full'}
         ttk.Combobox(stage_controls,textvariable=self.stage,values=list(self.stage_names),state='readonly',width=26).pack(side='left',padx=8)
@@ -72,8 +72,9 @@ class CardReviewWindow:
         row=self.selected()
         if not row or self.app.case is not self.case:return
         try:
-            try:n=int(self.number.get());vendor=int(self.vendor_number.get())
-            except ValueError:raise ValueError('Enter the number shown on the card and its load number in this package.')
+            try:n=int(self.number.get());vendor=int(self.vendor_number.get()) if self.vendor_number.get().strip() else None
+            except ValueError:raise ValueError('Choose a package load. Enter a card number only when one is shown.')
+            if vendor is None and self.stage_names[self.stage.get()] is None:raise ValueError('Enter the number shown on the card or choose its clearly visible loading stage.')
             if not 1<=n<=150:raise ValueError('Enter a load number from 1 to 150.')
             if n>len(self.case['loads']) and not messagebox.askyesno('Add Loads',f'Add empty Loads {len(self.case["loads"])+1} through {n}? Measurements and evidence will still need to be checked.',parent=self.win):return
             confirm_card(self.case,row['path'],n,expected_sha=row['sha256'],vendor_number=vendor,stage=self.stage_names[self.stage.get()]);self.changed();self.refresh()

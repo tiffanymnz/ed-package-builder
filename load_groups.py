@@ -15,12 +15,13 @@ def card_candidates(case,include_hidden=False):
     for position,record in enumerate(case.get('imported_files',[])):
         path=record['path'];row=case.get('local_photo_results',{}).get(path,{})
         if not row.get('sha256') or Path(path).suffix.lower() not in ('.jpg','.jpeg','.png','.webp','.bmp','.tif','.tiff'):continue
-        values=scores(row);entry=case.get('load_identity_cache',{}).get(path,{})
+        from load_identity import current_clue
+        values=scores(row);entry=current_clue(dict(case,load_card_dismissals={}),path,row['sha256']) or {}
         review=case.get('load_card_reviews',{}).get(path,{})
         if review.get('sha256')!=row.get('sha256'):review={}
         signal=bool(values and values['load_board']>.26 and values['load_board']>values['property']+.035)
         if signal and not review and not entry.get('options') and values['receipt']>values['load_board'] and likely_receipt(values,path):continue
-        if not signal and not entry.get('options') and not review and not (row.get('card_detector_version')==1 and (row.get('card_detected') or row.get('card_regions'))):continue
+        if not signal and not entry.get('options') and not entry.get('stage_reading',{}).get('stage') and not review and not (row.get('card_detector_version')==1 and (row.get('card_detected') or row.get('card_regions'))):continue
         hidden=case.get('load_card_dismissals',{}).get(path,{}).get('sha256')==row.get('sha256')
         if hidden and not include_hidden:continue
         try:

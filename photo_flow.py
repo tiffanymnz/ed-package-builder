@@ -82,6 +82,9 @@ def build_photo_rows(case,previous=None):
     windows=review_windows(case,out)
     for row in out:
         if not row.get("proposal"):row["proposal"]=windows.get(row["path"],{})
+    from related_review import related_groups
+    related=related_groups(case,out)
+    for row in out:row['review_group']=related.get(row['path'],{})
     return out,rows
 
 class BackgroundPhotoWork:
@@ -225,7 +228,7 @@ class PhotoFlowWindow:
         self.target_box.bind('<<ComboboxSelected>>',lambda e:self.target_help())
         filters=ttk.Frame(body);filters.pack(fill='x',pady=(0,10))
         ttk.Label(filters,text='Photo Group / Load').pack(side='left',padx=(0,8))
-        self.load_filter=tk.StringVar(value='All Loads');self.load_box=ttk.Combobox(filters,textvariable=self.load_filter,state='readonly',width=18);self.load_box.pack(side='left');self.load_box.bind('<<ComboboxSelected>>',lambda e:self.filter_load())
+        self.load_filter=tk.StringVar(value='All Loads');self.load_box=ttk.Combobox(filters,textvariable=self.load_filter,state='readonly',width=27);self.load_box.pack(side='left');self.load_box.bind('<<ComboboxSelected>>',lambda e:self.filter_load())
         self.sort=tk.StringVar(value='Photo Date');sort=ttk.Combobox(filters,textvariable=self.sort,values=['Photo Date','Import Order'],state='readonly',width=15);sort.pack(side='left',padx=8);sort.bind('<<ComboboxSelected>>',lambda e:self.reset_page())
         actions=ttk.Frame(body);actions.pack(fill='x',pady=(0,10))
         ttk.Button(filters,text='Review Load Cards',command=self.review_cards).pack(side='left',padx=(0,8))
@@ -299,7 +302,7 @@ class PhotoFlowWindow:
     def review_cards(self):self.app.review_load_cards()
     def update_choices(self):
         loads=[f'Load {i}' for i in range(1,len(self.case['loads'])+1)]
-        groups=list(dict.fromkeys(r.get('proposal',{}).get('group_label') for r in self.rows if r.get('proposal',{}).get('group_label')))
+        groups=list(dict.fromkeys(g['group_label'] for r in self.rows for g in (r.get('proposal',{}),r.get('review_group',{})) if g.get('group_label')))
         choices=['All Loads','Not Assigned','Load Clues to Review']+loads+['Suggested '+n for n in loads]+groups
         self.load_box.configure(values=choices);self.target_box.configure(values=loads+['Before Removal','Removal in Progress','After Removal'])
         if self.load_filter.get() not in choices:self.load_filter.set('All Loads')
@@ -313,14 +316,14 @@ class PhotoFlowWindow:
         self.review_help.configure(text=help.get(target,f'Check that every selected photo belongs to {target}. The same container can be used for several loads.'))
     def filter_load(self):
         label=self.load_filter.get()
-        is_group=any(r.get('proposal',{}).get('group_label')==label for r in self.rows)
+        is_group=any(g.get('group_label')==label for r in self.rows for g in (r.get('proposal',{}),r.get('review_group',{})))
         if label in ('All Loads','Not Assigned','Load Clues to Review') or is_group:self.target.set('Choose a Load or Stage')
         if is_group:
             self.category.set('all');self.sort.set('Photo Date')
-            numbers={r.get('proposal',{}).get('load') for r in self.rows if r.get('proposal',{}).get('group_label')==label}
+            numbers={g.get('load') for r in self.rows for g in (r.get('proposal',{}),r.get('review_group',{})) if g.get('group_label')==label}
             if len(numbers)==1 and None not in numbers:
                 self.target.set('Load '+str(next(iter(numbers))));self.target_help()
-            else:self.review_help.configure(text='Check this group’s load card, or choose its load in the bottom bar before filling the template.')
+            else:self.review_help.configure(text='These photos look related. Check the trip and visible stage before applying a load or property stage. The same container may cover multiple trips.')
         if label=='Load Clues to Review' or label.startswith('Suggested Load '):self.category.set('all')
         if label.split()[-1].isdigit() and (label.startswith('Load ') or label.startswith('Suggested Load ')):
             self.target.set('Load '+label.split()[-1]);self.target_help()
@@ -349,7 +352,7 @@ class PhotoFlowWindow:
         self.job=self.win.after(250,self.poll)
     def filtered(self):
         rows=[]
-        group_labels={row.get('proposal',{}).get('group_label') for row in self.rows}
+        group_labels={g.get('group_label') for row in self.rows for g in (row.get('proposal',{}),row.get('review_group',{}))}
         for r in self.rows:
             category=self.category.get();load=self.load_filter.get()
             if category=='unreviewed' and (r['load'] or r['stage'] in PHASE):continue
@@ -358,7 +361,7 @@ class PhotoFlowWindow:
             elif category not in ('all','unreviewed') and r['category']!=category:continue
             if load=='Not Assigned' and r['load']:continue
             is_group=load in group_labels
-            if is_group and r.get('proposal',{}).get('group_label')!=load:continue
+            if is_group and all(g.get('group_label')!=load for g in (r.get('proposal',{}),r.get('review_group',{}))):continue
             if load.startswith('Load ') and load.split()[-1].isdigit() and r['load']!=int(load.split()[-1]):continue
             if load.startswith('Suggested Load ') and r.get('proposal',{}).get('load')!=int(load.split()[-1]):continue
             if load=='Load Clues to Review' and not r.get('proposal'):continue

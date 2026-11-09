@@ -8,7 +8,7 @@ from calculator_evidence import file_digest
 from load_text_runtime import MODEL_DIGEST,RUNTIME
 from small_vision_runtime import SetupCancelled
 
-VERSION=5
+VERSION=7
 LABEL=re.compile(r'^\s*load\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 FOCUSED_LABEL=re.compile(r'^\s*l[oa]{2}d\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 
@@ -40,6 +40,8 @@ def white_label_candidate(pixels):
 def card_candidate(path,text='',scene_scores=None):
  from cor_package import classify_document
  if classify_document(text) in ('invoice','bid','estimate','work_order','hpir'):return False
+ from annotation_panels import annotation_panel
+ if annotation_panel(path):return True
  if text_numbers(text) or re.search(r'\b(?:load|truck|loas)\b',text,re.I):return True
  import cv2
  try:
@@ -77,13 +79,15 @@ def read_load_card(path,base_text,cancel,runtime=None):
   return dict(sha256=before,model_digest=MODEL_DIGEST,version=VERSION,load=None,options=[],status='document',readings=[])
  readings=[dict(engine='standard',view='whole',loads=text_numbers(base_text),text=base_text[:1500])]
  detected=locate_cards(path);incomplete=False
+ from annotation_panels import annotation_panel
+ panel=annotation_panel(path)
  def read_view(image,view,max_tokens=224):
   nonlocal incomplete
   result=runtime.read(image,'regions',cancel,max_tokens=max_tokens)
   if result.get('truncated'):
    incomplete=True;readings.append(dict(engine='florence',view=view,loads=[],text=result.get('text','')[:1500],incomplete=True));return
   found=regions(result['text']);text='\n'.join(r['text'] for r in found)
-  numbers=sorted({n for r in found for n in text_numbers(r['text'])})
+  numbers=sorted(set(text_numbers(text))|{n for r in found for n in text_numbers(r['text'])})
   if classify_document(text) in ('invoice','bid','estimate','work_order','hpir'):numbers=[]
   readings.append(dict(engine='florence',view=view,loads=numbers,text=text[:1500]))
  for i,crop in enumerate(card_crops(path,detected)):
@@ -92,6 +96,23 @@ def read_load_card(path,base_text,cancel,runtime=None):
    target=Path(folder)/'card.png';crop.save(target);classic,_=read_image(target,page_mode=6)
   readings.append(dict(engine='standard',view=f'card-{i}',loads=text_numbers(classic),text=classic[:1500]))
   read_view(crop,f'card-{i}')
+ if panel:
+  with Image.open(path) as original:
+   image=ImageOps.exif_transpose(original).convert('RGB');box=panel['box'];crop=image.crop(tuple(round(v*(image.width if i%2==0 else image.height)) for i,v in enumerate(box)))
+  with tempfile.TemporaryDirectory(prefix='ed-stage-annotation-') as folder:
+   target=Path(folder)/'annotation.png';crop.save(target);classic,_=read_image(target,page_mode=6)
+  readings.append(dict(engine='standard',view='annotation',loads=text_numbers(classic),text=classic[:1500]))
+  read_view(crop,'annotation')
+  from annotation_panels import linearize_fraction
+  normalized=linearize_fraction(crop)
+  if normalized is not None:read_view(normalized,'annotation_fraction')
+  from handwriting_reader import reader_for
+  small=reader_for(runtime.root)
+  if small.ready():
+   for view,image in [('annotation',crop)]+([('annotation_fraction',normalized)] if normalized is not None else []):
+    annotation=small.read(image)
+    if annotation and annotation['score']>=.55:
+     readings.append(dict(engine='compact_handwriting',view=view,loads=[],text=annotation['text'],score=annotation['score'],model_sha256=annotation['model_sha256']))
  # A truncated whole scene no longer discards successful independent card crops.
  if not detected and not any(r['loads'] and r['engine']=='florence' for r in readings):
   read_view(path,'whole')
@@ -104,6 +125,8 @@ def read_load_card(path,base_text,cancel,runtime=None):
    readings.append(dict(engine='florence',view='whole_text_check',loads=[] if line.get('truncated') else text_numbers(line.get('text','').strip(),focused=True),text=line.get('text','')[:300],incomplete=bool(line.get('truncated'))))
  if before!=file_digest(path):raise ValueError('Photo changed during load-card reading.')
  result=combine_readings(readings)
+ from stage_text import evidence as stage_evidence
+ stage_reading=stage_evidence(readings)
  if not result['options'] and incomplete:result['status']='incomplete'
  fractions=[]
  if result['status'] in ('single_reader','corroborated') and len(result['options'])==1:
@@ -113,7 +136,7 @@ def read_load_card(path,base_text,cancel,runtime=None):
    fractions.extend(dict(row,region=i) for row in propose_half(crop))
  if before!=file_digest(path):raise ValueError('Photo changed during fraction analysis.')
  return dict(result,sha256=before,model_digest=MODEL_DIGEST,version=VERSION,readings=readings,
-             card_regions=detected,fraction_readings=fractions,detector_version=DETECTOR_VERSION,seconds=round(time.monotonic()-start,2))
+             card_regions=detected,annotation_panel=panel,stage_reading=stage_reading,fraction_readings=fractions,detector_version=DETECTOR_VERSION,seconds=round(time.monotonic()-start,2))
 
 def current_clue(case,path,sha):
  if case.get('load_card_dismissals',{}).get(path,{}).get('sha256')==sha:return None

@@ -16,6 +16,14 @@ def run(report_path):
         with tempfile.TemporaryDirectory(prefix='ed-card-engine-smoke-') as temp:
             path=Path(temp)/'synthetic-card.png';image=Image.new('RGB',(640,480),'white');draw=ImageDraw.Draw(image)
             draw.text((70,90),'LOAD 2',font=ImageFont.load_default(size=56),fill='black');draw.text((70,200),'FULL',font=ImageFont.load_default(size=48),fill='black');image.save(path)
+            from handwriting_reader import reader_for
+            annotation=reader_for(Path(temp)/'no-model-copy')
+            assert annotation.ready(),'Bundled annotation reader is missing'
+            annotation_image=Image.new('RGB',(320,80),'white');ImageDraw.Draw(annotation_image).text((12,8),'Full',font=ImageFont.load_default(size=56),fill='black')
+            annotation_result=annotation.read(annotation_image)
+            assert annotation_result and annotation_result['text'].lower()=='full',f'Bundled annotation inference failed: {annotation_result}'
+            result['bundled_annotation_inference']=True
+            annotation.stop()
             before=file_digest(path);clue=read_load_card(path,'',threading.Event(),reader)
             assert clue['options']==[2],f"Clean synthetic card was not read: {clue['options']}"
             assert file_digest(path)==before,'Source pixels changed'

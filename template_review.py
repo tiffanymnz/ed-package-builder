@@ -145,7 +145,7 @@ class TemplateCandidateIndex:
             visual=bool(score>=.15 and score>scores.get('other',0) and target in sorted(scores,key=scores.get,reverse=True)[:3])
             direct=bool(text.get('slot')==slot and slot!='calculator')
             semantic=self.semantics.get(path,{})
-            card_direct=bool(claim and claim.get('scene_context') and card_stage==target and group.get('load')==load_number and (max(semantic.get('loaded_container',0),semantic.get('empty_container',0))>.25 or sum(scores.get(k,0) for k in ('empty','quarter','half','three_quarters','full'))>.45))
+            card_direct=bool(claim and claim.get('scene_context') and card_stage==target and (group.get('load')==load_number or manual_load==load_number) and (max(semantic.get('loaded_container',0),semantic.get('empty_container',0))>.25 or sum(scores.get(k,0) for k in ('empty','quarter','half','three_quarters','full'))>.45))
             direct=direct or card_direct
             reviewed=case.get('photo_category_examples',{}).get(path,{})
             expected='measurement' if slot in ('height','width','length') else 'documents' if slot=='receipt' else 'container_photos'

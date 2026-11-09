@@ -1,51 +1,53 @@
-# ED Package Builder v50 — Upgrade Validation
+# ED Package Builder v51 — Measured Results and Release Gate
 
-## What changed
+Status: source candidate, not a replacement Windows release. v50 remains the last Windows-tested release. The user approved the 7.49 MiB annotation reader on November 8, 2026. It is now bundled in this source candidate; Windows validation remains pending.
 
-| Area | Upgrade |
-|---|---|
-| Photo review | Scrollable 6/12/24-photo grids, responsive columns, readable previews, retained multi-selection and work-area-aware window sizing |
-| Batch correction | Undo the last load, property-stage, category or trip-group action; reject undo after conflicting reviews or changed source files |
-| Repeated containers | Explicitly checked trip endpoints create bounded photo review groups; overlapping/interleaved clocks and date-only clues do not establish a trip |
-| Card reading | Split-line load labels and printed fraction symbols; no new OCR engine or model asset |
-| Measurements | Tape Detail navigates to a possible tape region, without inventing tape readings or dimensions |
-| Invoices | Select the final invoice version, keep superseded originals, or explicitly confirm a combined final bill; approval survives portable project reopening |
-| Export reliability | Durable journal and previous-file recovery after a process interruption |
-| Work-computer checks | Local aggregate storage and cached photo-review preparation timings; no telemetry |
+## Fresh source-photo evaluation
 
-The existing combined PDF, rate-based HUD deduction, bid comparison, source-bound evidence choices and portable .edcase workflow remain available.
+Reference labels were frozen before inspecting this run's predictions. The 88-photo set has not been established as wholly unseen during historical training; these results do not establish accuracy on new properties or handwriting styles.
 
-## Tests
+| Check | Result | Interpretation |
+|---|---|---|
+| Broad photo purpose, 88 originals | 77 suggestions; 76 matched checked labels; 11 withheld | One pile close-up incorrectly suggested as a measurement. Some references accept both visible container and measurement content. |
+| Before/After, 49 confidently labeled property scenes | 35 suggestions matched; 14 withheld | Another 12 ambiguous property scenes are unscored. No claim about their predictions. |
+| Three handwritten loading-stage annotations | v50 recovered 0; v51 optional reader recovered 3 | Quarter, Half and Full; very small development sample, not general handwriting accuracy. |
+| Template proposal given explicitly checked load membership | Quarter, Half and Full proposed in corresponding boxes | Empty, Three Quarters and a second Full view left unfilled; no invented trip labels or duplicate photo placement. |
+| Fresh current-reader scan, 336 originals | 157 candidates; no readable load-number results | Source sample lacks readable physical-trip cards. Prior cached replay did not establish this reader's current accuracy. |
+| Compact reader on 12 load cards plus 53 controls | 0 recovered load cards; 0 false positives on controls | Rejected as a replacement for the existing load-card reader. |
+| Experimental feature matching of reused containers | 0 correct, 1 wrong, 29 unresolved on nonseed references | Rejected; not included in app. |
+| Similar-view review assistance on 88-photo set | Two property-review groups containing 7 unresolved photos | Review convenience only, not verified stage/trip assignments. Not a measured staff time saving. |
 
-Windows run #27 passed all 417 tests with no skips. The actual frozen CPU photo reader, CPU card reader (version 5), all four workflow pages, 6/12/24-photo layouts, taskbar-boundary check and executable export smoke checks passed. Tested application code: 81bbbf90cb407c0a87c75be05cc97ccb14013d3b. Run ID: 42307807615. Download SHA-256: de8c6c226b4ea9e8a89776d9f77b5ab66232575ec1811030e0b17e8f84471842.
+No source photographs were uploaded to public model services. Existing model assets were used locally. Developer-host speed is not work-laptop speed.
 
-Local source suite: 417 checks, 345 passed and 72 graphical checks skipped on this display-less host. The actual CPU photo-model smoke check passed. Focused corrected regression fixtures: 22 passed, two graphical checks deferred to Windows.
+## Candidate changes
 
-The initial Windows pass caught a staged-file flushing incompatibility. It was corrected to use writable handles. Follow-up tests corrected two test-fixture errors: Windows path aliases and a mutable expected-selection set. Those errors were not ignored or converted to skips.
+- Detect large annotations above embedded scene photos; parse stage evidence independently of load numbers.
+- Optional compact handwriting reader uses the existing inference runtime; 7,850,705 bytes (7.49 MiB) extra model data. The approved model is bundled with the app, with no extra installation or copied model cache. No Paddle runtime is included.
+- Fraction preprocessing aligns existing visible glyphs; it does not add or substitute digits. Plain digits and dimensional text are rejected as stage fractions. Conflicting stage claims are withheld.
+- Stage-only evidence can assist template proposals after source-checked load assignment, with explicit user confirmation before placement.
+- Similar-view review batches use fixed representative similarity, date/category boundaries, and source checks. They never assign physical trips or stages.
+- Load-card hints reject outdated model versions or changed sources; dismissed cards remain accessible for restoration.
+- Export read-back integrity checks and a same-computer export lock protect against corrupted copies and simultaneous writes.
+- Removed the irrelevant $45/CYD exception from pending requirements. No active $45 policy trigger was present. Exact $2,500 boundary and gross/net basis remain unspecified by policy owner.
 
-## Photo replay: benefit and unresolved accuracy
+## Verification
 
-The existing example contained 336 photos. Eight manually checked endpoint photos seeded four trip windows. Sixty otherwise uncertain photos entered trip review groups.
+431 source tests: 359 passed, 72 GUI tests skipped because no graphical display was available. The fraction negative controls, source immutability, changed-source rejection, batch grouping boundaries, export corruption rollback and concurrent-export refusal passed. Windows frozen-executable and GUI validation must run before a v51 Windows release. No new end-to-end staff time or first-use usability result is claimed.
 
-Of 26 non-seed package-reference photos, the program proposed three correct loads, zero wrong loads and left 23 unresolved. The sixty review-window photos are not sixty verified assignments. No template box is populated merely because a photo falls inside a time window.
+## Export recovery, in plain language
 
-Seventy historical OCR readings showed no changed outcomes under the split-line parser. New layout support is regression-tested, but no new general recognition-accuracy percentage is demonstrated.
+The PDF and separate description/report cannot appear at precisely the same instant as one file-system operation. An interruption can briefly leave files from different exports. The journal restores the previous complete set when recovery runs. The candidate additionally checks the bytes written and prevents two app instances on the same computer from exporting to the same folder simultaneously. Physical drive damage, destroyed backups and storage devices that falsely report successful durable writes cannot be guaranteed recoverable. This is not a promise of cross-computer locking on network shares.
 
-Cached review preparation took about 0.21 seconds and 0.242 seconds on this host. This excludes inference and human review. The reference comes from an existing package and is imperfect; this is not an independent unseen-property evaluation.
+## Remaining release gates
 
-## Storage
+1. Storage approval is complete. The bundled reader passed a direct CPU inference check; its small handwriting benchmark supports a narrow benefit, not broad load-card improvement.
+2. Windows packaging and GUI regression validation after the final asset decision.
+3. Independently checked photos from additional properties and handwriting styles to establish generalization. Existing examples cannot prove that.
+4. Work-laptop and first-time staff trial to measure actual effort saved.
+5. Authoritative $2,500 boundary and gross/net basis. Do not invent a policy answer.
 
-Application plus existing models total approximately 649 MB (619 MiB), before project files. Keeping the download ZIP adds approximately 116 MB; it can be removed after extraction.
+Unclear reused-container trips remain a review decision unless distinct source-bound evidence supports them. No threshold was relaxed to force assignments.
 
-No additional model assets. Existing card-reader and photo-model assets total 366,587,180 bytes (349.6 MiB). Windows download: 116,296,146 bytes. Unpacked application: 282,701,325 bytes; editable projects are additional.
+## Approved integration verification
 
-## What is still unproven or intrinsically limited
-
-- Sorting accuracy on new properties and handwriting styles needs independently checked reference photos. Existing-case replay cannot establish that result.
-- Blurred, occluded or missing card/tape evidence may remain unreadable. Similar-looking reused containers cannot establish which physical trip occurred.
-- Date-only timestamps and conflicting/interleaved trip times require a manual decision. Property stages require visible property condition; timestamps and filenames are insufficient.
-- The first-time staff experience and actual end-to-end time saved on the work laptop have not been measured. Use the app's local performance check for its cached review-preparation speed; that does not measure staff efficiency.
-- Export recovery is validated for process interruption. Separate files are not simultaneously visible as one atomic change; damaged backups or hardware that does not honor durable writes remain outside the guarantee.
-- The exact $2,500 bid boundary, whether the threshold uses the gross or net amount, and any $45/CYD exception still need an authoritative policy decision.
-
-This is a tested workflow upgrade when the Windows gates pass. It is not evidence that every recognition limitation is solved, and it should not be described as perfect or fully automatic photo placement.
+The bundled model hash and Apache license passed checks. A direct CPU inference read synthetic Full text correctly without copying the model into a user cache. The Windows build now bundles these assets, and its frozen card-reader test exercises the annotation model. Reader cache version advanced to 7 so prior no-annotation results do not prevent reanalysis. Windows CI has not yet run for this candidate.

@@ -13,16 +13,11 @@ def stage_claim(case,path):
         areas=[max(0,r['box'][2]-r['box'][0])*max(0,r['box'][3]-r['box'][1]) for r in locate_cards(path) if len(r.get('box',[]))==4]
         return dict(stage=review['stage'],sha256=sha,basis='Reviewed Card Text',scene_context=bool(areas and max(areas)<.25),verified=True)
     clue=current_clue(case,path,sha)
-    if not clue or clue.get('status') not in ('single_reader','corroborated'):return None
-    patterns={'empty':r'empty(?:\s+container)?','quarter':r'(?:1\s*/\s*4|quarter)(?:\s+full)?',
-              'half':r'(?:1\s*/\s*2|half)(?:\s+full)?','three_quarters':r'(?:3\s*/\s*4|three\s+quarters?)(?:\s+full)?','full':r'full(?:\s+container)?'}
+    if not clue:return None
+    from stage_text import stages
     claims=set()
     for reading in clue.get('readings',[]):
-        if reading.get('incomplete'):continue
-        for line in reading.get('text','').splitlines():
-            value=line.strip(' .,:;').lower().translate(str.maketrans({'¼':'1/4','½':'1/2','¾':'3/4'}))
-            for stage,pattern in patterns.items():
-                if re.fullmatch(pattern,value):claims.add(stage)
+        if not reading.get('incomplete'):claims.update(stages(reading.get('text','')))
     from card_fractions import VERSION as FRACTION_VERSION
     fractions=[r for r in clue.get('fraction_readings',[]) if r.get('version')==FRACTION_VERSION and r.get('stage')=='half' and len(r.get('box',[]))==4]
     if fractions:claims.add('half')
@@ -31,7 +26,7 @@ def stage_claim(case,path):
     for region in clue.get('card_regions',[]):
         box=region.get('box',[])
         if len(box)==4 and all(isinstance(v,(int,float)) and 0<=v<=1 for v in box):areas.append(max(0,box[2]-box[0])*max(0,box[3]-box[1]))
-    return dict(stage=next(iter(claims)),sha256=sha,basis='Standalone Fraction Shape' if fractions else 'Literal Card Text',scene_context=bool(areas and max(areas)<.25),verified=False)
+    return dict(stage=next(iter(claims)),sha256=sha,basis='Standalone Fraction Shape' if fractions else 'Visible Stage Annotation' if clue.get('annotation_panel') else 'Literal Card Text',scene_context=bool(clue.get('annotation_panel') or (areas and max(areas)<.25)),verified=False)
 
 def reviewed_card_mapping(case,path):
     from load_identity import current_clue
