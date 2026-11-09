@@ -71,7 +71,7 @@ jobs:
           python -c "import ed_builder; print('Builder loaded:', ed_builder.__file__); import ed_app; print('Application imports passed')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          python -m PyInstaller --noconfirm --clean --windowed --onedir --paths "." --hidden-import ed_builder --hidden-import ed_app --name ED_Package_Builder --add-data "Debris Progression template.docx;." --collect-submodules fitz --collect-submodules PIL app_launcher.py
+          python -m PyInstaller --noconfirm --clean --windowed --onedir --paths "." --hidden-import ed_builder --hidden-import ed_app --name ED_Package_Builder --add-data "Debris Progression template.docx;." --add-data "assets/handwriting;assets/handwriting" --collect-submodules fitz --collect-submodules PIL app_launcher.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           if (!(Test-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe')) {
