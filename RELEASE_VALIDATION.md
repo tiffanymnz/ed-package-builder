@@ -1,3 +1,25 @@
+# v53 - Supplied-Data Acceptance
+
+November 9, 2026. The user accepts the supplied corpus as the practical accuracy-test scope. No additional photo submission is required to finish this developer test pass. This does not convert development cases into untouched-property evidence.
+
+## Completed developer checks
+
+- 449 local source/desktop tests passed, no skips, including four new regressions for card localization/fallback and measurement controls.
+- All 14 supplied ZIPs imported successfully. 6,776 source files imported uniquely within their submissions, decoded where images, retained their hashes and were not duplicated on repeat import. Duplicate submissions under alternate archive names were excluded.
+- Four reference-directed package exports again preserved all 309 selected photos and all 13 imported financial pages, including their exact text and rendered pixels. The same expected source-evidence and financial conflicts remain visible; no vendor record was silently corrected.
+- Broad category testing: 303 visually labeled photos, 294 scored and 9 excluded as ambiguous. Final results: 147 correct suggestions, 3 wrong suggestions and 144 withheld. Suggestion precision is 147/150 (98%); suggestion coverage is 150/294 (51%). Withheld results are review work, not successes. The 81-photo confirmation subset was disjoint from the first expanded sample and labeled before predictions; it returned 38 correct suggestions, 3 wrong and 40 withheld. These residual mistakes were not used to alter its reference labels or force a pass.
+- Actual handwritten/printed load-card check: seven positive load numbers, two correct suggestions and five withheld, no wrong numbers. Four positive stage references: three correct, one withheld. Three negative controls: no false load or stage. This small test establishes reader behavior on those samples, not high recall or a fully automatic reading workflow.
+
+## Distribution and remaining decisions
+
+The v52 baseline passed 445 Windows tests and offline frozen photo/card/annotation, interface and executable export checks in run 42688684723. The v53 update requires its own successful matching workflow before distribution. Its exact run and executable hashes are recorded with the delivered portable draft rather than inferred from the baseline.
+
+The software workflow is implemented. The next planned user step is the work-laptop trial for company-machine compatibility, real review effort and elapsed time. Those measurements cannot be made on this host. The exact $2,500 boundary and gross/net policy basis remain deferred; no new $45/CYD rule was introduced.
+
+Real source conflicts are package-specific review work rather than unfinished application features. Repeated photographs cannot prove distinct progressive stages or trips; unreadable or unrecognized handwriting needs manual selection; an invoice disagreement needs a vendor correction. The app must preserve those findings rather than label the original package complete.
+
+## Earlier v52 detail
+
 # v52 Source Candidate - Release Validation
 
 November 9, 2026. Prepared for review; not a replacement Windows release yet.

@@ -8,7 +8,7 @@ from calculator_evidence import file_digest
 from load_text_runtime import MODEL_DIGEST,RUNTIME
 from small_vision_runtime import SetupCancelled
 
-VERSION=7
+VERSION=8
 LABEL=re.compile(r'^\s*load\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 FOCUSED_LABEL=re.compile(r'^\s*l[oa]{2}d\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 
@@ -96,6 +96,7 @@ def read_load_card(path,base_text,cancel,runtime=None):
    target=Path(folder)/'card.png';crop.save(target);classic,_=read_image(target,page_mode=6)
   readings.append(dict(engine='standard',view=f'card-{i}',loads=text_numbers(classic),text=classic[:1500]))
   read_view(crop,f'card-{i}')
+
  if panel:
   with Image.open(path) as original:
    image=ImageOps.exif_transpose(original).convert('RGB');box=panel['box'];crop=image.crop(tuple(round(v*(image.width if i%2==0 else image.height)) for i,v in enumerate(box)))
@@ -114,7 +115,7 @@ def read_load_card(path,base_text,cancel,runtime=None):
     if annotation and annotation['score']>=.55:
      readings.append(dict(engine='compact_handwriting',view=view,loads=[],text=annotation['text'],score=annotation['score'],model_sha256=annotation['model_sha256']))
  # A truncated whole scene no longer discards successful independent card crops.
- if not detected and not any(r['loads'] and r['engine']=='florence' for r in readings):
+ if not any(r['loads'] and r['engine']=='florence' for r in readings):
   read_view(path,'whole')
   # Retain the legacy independent line check when a whole scene supplies a label.
   whole=readings[-1]

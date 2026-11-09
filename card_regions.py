@@ -1,7 +1,7 @@
 """Bounded paper-region proposals. A region never establishes a load identity."""
 import numpy as np
 from PIL import Image,ImageOps
-VERSION=1
+VERSION=2
 
 def _locate_cards(path,limit=3):
     import cv2
@@ -16,15 +16,20 @@ def _locate_cards(path,limit=3):
         # This changes only localization masks, never source image pixels.
         mask=cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((7,7),np.uint8))
         masks.append(cv2.morphologyEx(mask,cv2.MORPH_CLOSE,np.ones((7,7),np.uint8)))
+    # Printed load cards also use yellow paper. Keep the same geometric and
+    # ink checks as neutral paper; color alone never establishes a load.
+    yellow=cv2.inRange(hsv,(18,55,110),(40,255,255))
+    yellow=cv2.morphologyEx(yellow,cv2.MORPH_OPEN,np.ones((3,3),np.uint8))
+    masks.append(cv2.morphologyEx(yellow,cv2.MORPH_CLOSE,np.ones((5,5),np.uint8)))
     edges=cv2.Canny(gray,45,130);masks.append(cv2.dilate(edges,np.ones((2,2),np.uint8)))
     candidates=[]
     for mask in masks:
         contours,_=cv2.findContours(mask,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
         for contour in contours:
             area=cv2.contourArea(contour);fraction=area/(width*height)
-            if not .012<=fraction<=.55:continue
+            if not .004<=fraction<=.55:continue
             rect=cv2.minAreaRect(contour);a,b=rect[1]
-            if min(a,b)<32 or not .35<=a/b<=2.9 or area/(a*b)<.70:continue
+            if min(a,b)<24 or not .35<=a/b<=2.9 or area/(a*b)<.70:continue
             polygon=cv2.approxPolyDP(contour,.025*cv2.arcLength(contour,True),True)
             if not 4<=len(polygon)<=7:continue
             x,y,w,h=cv2.boundingRect(contour)
@@ -33,7 +38,8 @@ def _locate_cards(path,limit=3):
             if len(pixels)<100:continue
             ink=float((strokes[inside>0]>25).mean())
             neutral=float((hsv[:,:,1][inside>0]<100).mean())
-            if not .004<=ink<=.28 or neutral<.6:continue
+            yellow_fraction=float(((hsv[:,:,0]>=18)&(hsv[:,:,0]<=40)&(hsv[:,:,1]>=55))[inside>0].mean())
+            if not .004<=ink<=.28 or max(neutral,yellow_fraction)<.6:continue
             # Handwriting consists of several compact strokes, not long window
             # frames / door edges. Inspect only pixels inside the paper mask.
             letters=((strokes>16)&(inside>0)).astype(np.uint8)

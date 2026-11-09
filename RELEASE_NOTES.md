@@ -1,3 +1,12 @@
+# v53 - Supplied-Data Acceptance and Card Review Fixes
+
+- Yellow paper cards use the same geometry and ink checks as neutral cards; blank yellow areas do not establish cards or loads.
+- An unhelpful proposed card region no longer suppresses whole-photo reading when the reader found no load number.
+- Text-only lawn-equipment comparisons withhold a false measurement suggestion while preserving the genuine tape suggestions in the expanded check. No new runtime model is introduced.
+- Cache versions change so saved reader and sorting suggestions are rechecked.
+- Four new synthetic regressions cover these behaviors. All 449 local source/desktop tests passed without skips.
+- Supplied-data validation now covers all 14 ZIP submissions, four combined reference packages, 303 labeled category photos and actual handwritten load cards. The full results include mistakes and withheld readings; see RELEASE_VALIDATION.md.
+
 # v52 - Smoother Review, Reliable Export and Further Validation
 
 - Project opening and package export now run off the interface thread, show progress and support cancellation. A case cannot be changed or exported twice during a file operation.
