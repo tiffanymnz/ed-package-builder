@@ -1,0 +1,9 @@
+ED Package Builder v49 — Source Release Candidate
+
+Upload the extracted source contents to the existing repository, including new modules and .github/workflows/build-windows.yml. Replace matching files. Do not delete saved .edcase projects or vendor originals. This archive is source, not a Windows executable.
+
+Run Build Windows Portable. The workflow now tests the actual frozen card reader as well as the photo engine and interface. Download the Windows portable artifact only after the complete current workflow passes. No current Windows build has been completed here.
+
+No new model download is introduced. Existing optional model files are reused. Test-only model downloads occur on the CI runner and are not bundled with the application.
+
+Use START_HERE.md. For dense photo review, select 12 or 24 Photos per Page; switch back to 6 for larger previews. Use Show Hidden Cards to restore an accidentally hidden card. Calendar buckets are for inspection, not proof of a physical trip. Check the proposed fraction and the visible load before selecting its template box.
