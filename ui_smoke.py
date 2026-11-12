@@ -56,6 +56,13 @@ def run(report_path):
                 assert all(im.width()>=80 and im.height()>=60 for im in window.images),'Photo previews are too small to inspect'
                 assert window.undo_button.winfo_ismapped(),'Batch undo action is hidden'
                 densities.append(int(size));capture('review-'+size,window.win)
+            images=list(window.images);cards=list(window.cards.winfo_children())
+            window.toggle(window.visible[0]['path']);window.select_page();root.update()
+            assert len(window.selected)==24 and all(v.get() for v in window.check_vars),'Fast selection lost checked photos'
+            assert window.images==images and window.cards.winfo_children()==cards,'Selection rebuilt the photo previews'
+            window.clear_selection();root.update()
+            assert not window.selected and not any(v.get() for v in window.check_vars),'Clear selection did not update the controls'
+            result['selection_checks']=['previews_reused','page_selection','clear_selection']
             assert window.apply_button.winfo_rooty()+window.apply_button.winfo_height()<=window.win.winfo_rooty()+window.win.winfo_height(),'Review action extends below the window'
             left,top,right,bottom=work_area(root)
             assert window.apply_button.winfo_rooty()+window.apply_button.winfo_height()<=bottom-4,'Photo review action is obscured by the taskbar'

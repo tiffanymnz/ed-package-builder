@@ -388,18 +388,25 @@ class PhotoFlowWindow:
         return rows
     def reset_page(self):self.page=0;self.render()
     def move(self,n):self.page=max(0,self.page+n);self.render()
-    def clear_selection(self):self.selected.clear();self.render()
+    def clear_selection(self):self.selected.clear();self.refresh_selection()
     def select_filtered(self):
         if self.app.case is not self.case:return
         rows=self.filtered()
         if not rows:return
-        self.selected.update(r['path'] for r in rows);self.render()
+        self.selected.update(r['path'] for r in rows);self.refresh_selection()
         self.review_help.configure(text=f'{len(rows)} filtered photos selected across all pages. Check the group before applying a load or stage.')
-    def select_page(self):self.selected.update(r['path'] for r in self.visible);self.render()
+    def select_page(self):self.selected.update(r['path'] for r in self.visible);self.refresh_selection()
     def toggle(self,path):
         if path in self.selected:self.selected.remove(path)
         else:self.selected.add(path)
-        self.render()
+        self.refresh_selection()
+    def refresh_selection(self):
+        for path,(variable,button) in getattr(self,'selection_controls',{}).items():
+            chosen=path in self.selected;variable.set(chosen)
+            button.configure(text=('Selected' if chosen else 'Select Photo') if self.page_size.get()=='6' else '')
+        filtered={r['path'] for r in self.filtered()};outside=len(self.selected-filtered)
+        self.selection.configure(text=f'{len(self.selected)} Selected'+(f' · {outside} Outside Filter' if outside else ''))
+        self.update_apply_state()
     def find_related(self):
         if len(self.selected)!=1:messagebox.showinfo('Choose One Photo','Select one example photo to find related views.',parent=self.win);return
         from review_assist import similar_views
@@ -434,7 +441,7 @@ class PhotoFlowWindow:
         self.app.add_load();self.app.save();self.update_choices();self.target.set(f"Load {len(self.case['loads'])}");self.app.e_load.set(str(len(self.case['loads'])));self.target_help()
     def render(self):
         for child in self.cards.winfo_children():child.destroy()
-        self.images=[];self.check_vars=[];rows=self.filtered()
+        self.images=[];self.check_vars=[];self.selection_controls={};rows=self.filtered()
         size=int(self.page_size.get());columns=3 if size==6 else 4 if size==12 else max(3,min(6,max(450,self.canvas.winfo_width())//145));grid_rows=(size+columns-1)//columns
         pages=max(1,(len(rows)+size-1)//size);self.page=min(self.page,pages-1)
         self.visible=rows[self.page*size:self.page*size+size]
@@ -442,7 +449,7 @@ class PhotoFlowWindow:
         for index in range(4):self.cards.rowconfigure(index,weight=0,uniform='')
         service=getattr(self.app,'_background_photos',None)
         if service and service.case is self.case:service.prioritize(r['path'] for r in self.visible)
-        self.pager.configure(text=f'{self.page+1} / {pages}');self.selection.configure(text=f'{len(self.selected)} Selected')
+        self.pager.configure(text=f'{self.page+1} / {pages}');self.refresh_selection()
         self.update_apply_state()
         if not rows:ttk.Label(self.cards,text='No photos in this group yet. Other groups remain available.',wraplength=460).pack(pady=30);return
         for i,r in enumerate(self.visible):
@@ -450,7 +457,7 @@ class PhotoFlowWindow:
             self.cards.columnconfigure(i%columns,weight=1,uniform='photos');self.cards.rowconfigure(i//columns,weight=1,uniform='rows')
             controls=ttk.Frame(card,style='Card.TFrame');controls.pack(side='bottom',fill='x')
             selected=tk.BooleanVar(self.win,value=r['path'] in self.selected);self.check_vars.append(selected)
-            ttk.Checkbutton(controls,text=('Selected' if r['path'] in self.selected else 'Select Photo') if size==6 else '',command=lambda p=r['path']:self.toggle(p),variable=selected).pack(side='left')
+            checkbox=ttk.Checkbutton(controls,text=('Selected' if r['path'] in self.selected else 'Select Photo') if size==6 else '',command=lambda p=r['path']:self.toggle(p),variable=selected);checkbox.pack(side='left');self.selection_controls[r['path']]=(selected,checkbox)
             ttk.Button(controls,text='Open',command=lambda p=r['path']:self.inspect([p])).pack(side='right')
             caption=(f"Load {r['load']}" if r['load'] else STAGES.get(r['stage'],'Not Assigned') if r['stage'] in PHASE else r.get('proposal',{}).get('reason','Load Not Assigned'))+'\n'+r['timing']
             if not r['load'] and r.get('stage_proposal') and r['stage'] not in PHASE:
@@ -480,6 +487,8 @@ class PhotoFlowWindow:
         if not self.selected:return
         if self.target.get()=='Choose a Load or Stage':return
         if self.app.case is not self.case:self.close();return
+        outside=len(self.selected-{r['path'] for r in self.filtered()})
+        if outside and not messagebox.askyesno('Include Photos Outside This Filter?',f'{len(self.selected)} photos are selected, including {outside} outside the current filter. Apply this load or stage to all selected photos?',parent=self.win):return
         try:
             from review_actions import snapshot
             before=snapshot(self.case);paths=sorted(self.selected)

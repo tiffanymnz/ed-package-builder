@@ -70,6 +70,7 @@ class PackageApp(GuidedApp):
 
     def update_guide(self):
         super().update_guide()
+        for control in (self.next_button,self.project_save_button,self.output_button):control.configure(state='normal' if self.case else 'disabled')
         if self.current_step()==1:self.refresh_load_progress()
         if self.current_step()==3: self.next_button.configure(text='Export COR Package')
 

@@ -1,4 +1,4 @@
-# Developer Acceptance Scope — v57
+# Developer Acceptance Scope — v58
 
 This is a release gate, not a claim of perfect recognition or an optimal interface for every user. No known significant actionable defect identified in this pass is intentionally deferred to staff testing. A verified trial build requires a matching successful Windows run and inspected screenshots.
 
@@ -19,3 +19,5 @@ This is a release gate, not a claim of perfect recognition or an optimal interfa
 | Windows delivery | Full source suite, actual offline bundled inference, actual frozen imports/document UI, navigation, DOCX/PDF export, screenshots and artifact digest |
 
 Recognition uncertainty caused by ambiguous evidence remains visible for review. The models and thresholds are unchanged in v57; the existing supplied-data measurements and limitations remain in RELEASE_VALIDATION.md. Company-device compatibility and real staff time saved are not measurable in this environment, and are not used to excuse known software defects.
+
+The v58 gate adds selection without image reloads/grid rebuilds, preserved cross-page checks, explicit outside-filter scope, source-change rejection after fast selection, disabled no-case actions and readable measurement findings. Recognition models are unchanged.

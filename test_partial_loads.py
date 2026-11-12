@@ -37,7 +37,7 @@ class PartialLoadTests(unittest.TestCase):
   from types import SimpleNamespace
   from unittest.mock import Mock
   case={};rows=[dict(path=str(i)) for i in range(20)]
-  window=SimpleNamespace(app=SimpleNamespace(case=case),case=case,filtered=lambda:rows,selected=set(),render=Mock(),review_help=Mock())
+  window=SimpleNamespace(app=SimpleNamespace(case=case),case=case,filtered=lambda:rows,selected=set(),refresh_selection=Mock(),review_help=Mock())
   PhotoFlowWindow.select_filtered(window);self.assertEqual(len(window.selected),20);self.assertEqual(case,{})
 
  def test_new_assignment_above_final_fill_is_rejected_atomically(self):

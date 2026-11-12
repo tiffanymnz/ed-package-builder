@@ -1,3 +1,10 @@
+# v58 - Faster Photo Selection and Clearer Actions
+
+- Selecting/deselecting photos, selecting a page and clearing selection update the existing controls without reopening, rehashing or decoding the page's source images. Previews, keyboard focus and scroll position stay in place. Assignment still verifies original hashes.
+- The selected count identifies photos outside the current filter; applying a load/stage to that wider selection requires an explicit confirmation. Selection across ordinary pages remains available.
+- Next, Save Project and Open Output Folder are disabled until a case is open. Measurement issues display the same field names staff see in the form.
+- Recognition models and thresholds remain unchanged. This release improves review efficiency and safeguards, not recognition recall.
+
 # v57 - Developer Workflow Acceptance
 
 - Vendor folder/ZIP imports prepare files and PDF document suggestions off the interface thread. Cancel leaves the case unchanged; commit failures roll back newly moved files. Original bytes, exact duplicate detection and import limits are preserved.

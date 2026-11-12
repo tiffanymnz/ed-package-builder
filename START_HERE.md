@@ -29,3 +29,5 @@
 **Document review on a smaller screen:** Scroll the details; Cancel and Confirm Document stay at the bottom of the window. Escape closes the dialog without confirming it.
 
 **Interrupted work:** Cancelling an export or declining to close resumes background photo processing. If an optional analysis cache is damaged, saved projects keep the original evidence and usable in-memory results.
+
+**Selecting photos:** Selections stay checked across pages. If you change a filter, the selected count identifies photos outside that filter. Applying a load or stage to those photos asks you to confirm the full selection. More > Clear Selection removes all checks. Selection reuses existing previews; assignment still checks the original files.

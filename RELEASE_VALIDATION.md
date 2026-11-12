@@ -1,3 +1,11 @@
+# v58 - Photo Review Efficiency and Final Action Clarity
+
+November 12, 2026. Six added regression checks verify selection without source/image reads or widget rebuilds, cross-page selections, outside-filter confirmation, changed-source assignment rejection, readable measurement fields and first-run action states. The frozen UI smoke also checks reuse of all 24 previews, page selection and clearing selection.
+
+The v57 workflow, transactional import, save/resume, costs and export checks remain active. Recognition algorithms and thresholds are unchanged; prior supplied-data recognition evidence is retained below. Source and exact Windows results, artifact identity and visual inspection appear in the delivered validation record.
+
+## Historical validation
+
 # v57 - Broader Developer Acceptance
 
 November 12, 2026. This pass examines first-run guidance, vendor intake, document review, repeated use, interrupted operations, source changes and saved-project recovery in addition to the existing load/cost/export suite.

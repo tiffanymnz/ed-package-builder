@@ -105,7 +105,8 @@ class GuidedApp(App):
                           ('Build transmittal PDF', self.transmittal), ('How to use', self.help)]:
             tools.add_command(label=label, command=fn)
         for label, fn in [('Save', self.save), ('Open', self.open_case), ('New Case', self.new_case)]:
-            ttk.Button(header, text=label, command=fn).pack(side='right', padx=4)
+            control=ttk.Button(header,text=label,command=fn);control.pack(side='right',padx=4)
+            if label=='Save':self.project_save_button=control
         heading = ttk.Frame(workspace, padding=(24, 6))
         heading.pack(fill='x')
         ttk.Label(heading, textvariable=self.page_title, style='Heading.TLabel').pack(anchor='w')
@@ -116,7 +117,7 @@ class GuidedApp(App):
         self.back_button.pack(side='left')
         self.next_button = ttk.Button(footer, text='Next: Photos & files', style='Primary.TButton', command=self.next_step)
         self.next_button.pack(side='right')
-        ttk.Button(footer, text='Open Output Folder', command=self.open_output).pack(side='right', padx=8)
+        self.output_button=ttk.Button(footer,text='Open Output Folder',command=self.open_output);self.output_button.pack(side='right',padx=8)
         ttk.Label(workspace, textvariable=self.status, style='Muted.TLabel', wraplength=700).pack(side='bottom', fill='x', padx=24, pady=(0, 6))
         self.tabs = ttk.Notebook(workspace, style='Pages.TNotebook', takefocus=False)
         self.tabs.pack(fill='both', expand=True, padx=24, pady=(0, 8))
@@ -573,6 +574,8 @@ class GuidedApp(App):
                 for raw, human in SLOT_LABELS.items(): text = text.replace('image '+raw, 'photo: '+human)
                 text = text.replace('First 10 CYD progression/remaining debris evidence unlinked', 'Assign first-10-CYD evidence in Photos & files.')
                 text = text.replace('Missing property before and/or after photo selections', 'Assign property before-work and after-work photos.')
+                from ui_text import readable_issue
+                text=readable_issue(text)
                 ident = str(i); self.issue_routes[ident] = route
                 tree.insert('', 'end', iid=ident, text=text, values=('Resolve' if issue.startswith('BLOCKING') else 'Review', STEPS[route][0]))
         return issues
