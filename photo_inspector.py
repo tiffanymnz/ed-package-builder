@@ -7,13 +7,14 @@ from PIL import Image, ImageOps, ImageTk
 
 class PhotoPane(ttk.Frame):
     MAX_PIXELS = 24_000_000
-    def __init__(self, parent, path):
+    def __init__(self, parent, path, card_regions=None):
         super().__init__(parent)
+        self.card_regions=card_regions;self.card_region_index=0
         self.source = None; self.preview = None; self.scale = 1.; self.rotation = 0; self.fit_mode = True; self.fit_job = None
         ttk.Label(self, text=Path(path).name, wraplength=480).pack(fill='x', pady=5)
         controls=ttk.Frame(self); controls.pack(fill='x')
-        for label, action in [('Fit', self.fit), ('-', lambda:self.zoom(.8)), ('+', lambda:self.zoom(1.25)), ('Rotate', self.rotate), ('Tape Detail', self.tape_detail)]:
-            ttk.Button(controls,text=label,command=action,width=11 if label=='Tape Detail' else 7).pack(side='left',padx=2)
+        for label, action in [('Fit', self.fit), ('-', lambda:self.zoom(.8)), ('+', lambda:self.zoom(1.25)), ('Rotate', self.rotate), (('Card Detail' if card_regions is not None else 'Tape Detail'), (self.card_detail if card_regions is not None else self.tape_detail))]:
+            ttk.Button(controls,text=label,command=action,width=11 if label in ('Tape Detail','Card Detail') else 7).pack(side='left',padx=2)
         self.detail=ttk.Label(controls,text='Drag to pan');self.detail.pack(side='left',padx=8)
         box=ttk.Frame(self);box.pack(fill='both',expand=True)
         self.canvas=tk.Canvas(box,background='#202a35',highlightthickness=0)
@@ -33,7 +34,7 @@ class PhotoPane(ttk.Frame):
                 if image.width*image.height>self.MAX_PIXELS:
                     image.thumbnail((4800,4800))
                 self.source=image.copy()
-            self.after_idle(self.fit)
+            self.fit_job=self.after_idle(self.fit)
         except Exception as exc:self.canvas.create_text(20,25,anchor='nw',fill='white',text='Cannot preview this photo:\n'+str(exc),width=350)
     def cleanup(self,event):
         if event.widget is self and self.fit_job:
@@ -45,7 +46,8 @@ class PhotoPane(ttk.Frame):
     def image(self):return self.source.rotate(self.rotation,expand=True) if self.rotation else self.source
     def fit(self):
         if self.source is None:return
-        self.fit_job=None;self.fit_mode=True
+        if self.fit_job:self.after_cancel(self.fit_job);self.fit_job=None
+        self.fit_mode=True
         self.update_idletasks();im=self.image()
         self.scale=min(max(100,self.canvas.winfo_width()-20)/im.width,max(100,self.canvas.winfo_height()-20)/im.height,1)
         self.render();self.canvas.xview_moveto(0);self.canvas.yview_moveto(0)
@@ -57,6 +59,25 @@ class PhotoPane(ttk.Frame):
         self.canvas.xview_moveto(x[0]);self.canvas.yview_moveto(y[0])
     def rotate(self):
         if self.source is not None:self.rotation=(self.rotation+90)%360;self.fit()
+    def card_detail(self):
+        if self.source is None:return
+        import math
+        regions=[]
+        for row in self.card_regions or []:
+            box=row.get('box',[])
+            if len(box)==4 and all(isinstance(v,(int,float)) and math.isfinite(v) for v in box) and 0<=box[0]<box[2]<=1 and 0<=box[1]<box[3]<=1:regions.append(box)
+        if not regions:
+            self.zoom(2);self.detail.configure(text='Locate the Card · Check Its Text');return
+        if self.fit_job:self.after_cancel(self.fit_job);self.fit_job=None
+        self.rotation=0;self.fit_mode=False;self.update_idletasks()
+        index=self.card_region_index%len(regions);x1,y1,x2,y2=regions[index];self.card_region_index=(index+1)%len(regions)
+        w,h=self.source.size;rw=max((x2-x1)*w*1.2,w*.04);rh=max((y2-y1)*h*1.2,h*.04)
+        self.scale=min(max(100,self.canvas.winfo_width()-20)/rw,max(100,self.canvas.winfo_height()-20)/rh,8,6000/max(w,h))
+        self.render()
+        self.canvas.xview_moveto(max(0,(x1+x2)/2-self.canvas.winfo_width()/(2*w*self.scale)))
+        self.canvas.yview_moveto(max(0,(y1+y2)/2-self.canvas.winfo_height()/(2*h*self.scale)))
+        self.detail.configure(text=f'Card Area {index+1} / {len(regions)} · Fit Shows Full Photo')
+
     def tape_detail(self):
         if self.source is None:return
         try:

@@ -1,3 +1,11 @@
+# v55 - Stronger Stage Clues and Faster Card Inspection
+
+- A bounded compact-reader pass recovers isolated Full/Empty words after a load clue exists. Limited OCR typography such as fu!l is accepted only as a single-reader stage suggestion after two source-pixel reads agree. Nearby fraction ink vetoes the isolated-word interpretation. This never repairs load numbers, assigns trips or fills templates.
+- Review Load Cards now offers Card Detail to cycle detected areas; Fit restores the full photo. Zoom affects the preview only. Original files and review decisions are preserved.
+- The broad photo classifier stays unchanged after multi-view and tape-focus experiments failed to justify their processing/review cost. A broader yellow-paper detector was rejected because it increased unrelated review areas.
+- The 90-photo validation references were reinspected. One exterior photo had been mislabeled as a document. Corrected v54/v55 results are 65 correct, zero wrong and 23 withheld on 88 scored photos. This is a reference correction, not a recognition gain.
+- Local source/desktop suite: 464 tests, no skips. The matching Windows build must pass before distribution.
+
 # v54 - More Photo Suggestions and Better Load-Card Reading
 
 - A recalibrated compact category head makes more useful suggestions at the same 0.70 cutoff. The established measurement prior remains available to protect tape evidence. No additional runtime model download is required.

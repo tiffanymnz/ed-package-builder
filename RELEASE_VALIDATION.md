@@ -1,3 +1,38 @@
+# v55 - Final Recognition Refinement
+
+November 12, 2026. Same supplied corpus; no new vendor submission is needed for this developer pass.
+
+## Changes kept
+
+The stage reader adds at most eight compact line reads and two verification reads per detected card, only after an unambiguous load-number clue exists and no stage clue exists. A complete Full/Empty word, including limited letter-shaped OCR typography, must agree across two source-pixel crops. Nearby fraction ink blocks isolated Full. These remain single-reader suggestions for review; they do not establish trips, dimensions or template assignments. No new model download is required.
+
+Card Detail in Review Load Cards cycles existing detected card areas. Fit returns to the complete original photo. It changes preview zoom only. Invalid regions fall back to ordinary zoom.
+
+## Real-card replay
+
+The retained update is replayed against ten positive load-number examples, seven positive stage references and seven negative controls. Load-number recall remains limited and this small development-heavy sample cannot establish new-property generalization. The delivery validation record contains final results and exact source/build hashes.
+
+## Category reference correction
+
+All 90 photos in the v54 additional selection were visually rechecked. One exterior/property photo had an incorrect document reference; its source bytes and model prediction were unchanged. The previous 64-correct/1-wrong/23-withheld result therefore becomes **65 correct, zero wrong and 23 withheld on 88 scored photos** for both v54 and v55. Two ambiguous references remain excluded. Do not describe this as an algorithm improvement. Across the full 393-photo set, 382 are scored: 296 correct, two wrong and 84 withheld. This includes 213 head-fit examples and is not an independent accuracy estimate. The residual mistakes include a disposal-site debris scene suggested as a container and a tape-measurement view suggested as a container.
+
+## Experiments rejected
+
+- Strict agreement across three extra crops recovered only two additional correct suggestions among 393 photos; deploying it on unresolved photos would add many model calls for little reduction in review. A looser agreement rule introduced two additional wrong suggestions. Neither is deployed.
+- Tape-focused crops made no useful category changes under the tested conservative acceptance rule.
+- Header/footer, angle and fraction-layout trials did not reliably recover remaining load numbers or fractional stages. They are not added as blanket retries.
+- Local-contrast expansion of yellow-card detection added unrelated review regions. The existing detector remains unchanged.
+
+These results support stopping further speculative changes for this trial build. They do not establish that future models or more independent evidence cannot improve recognition.
+
+## Software checks
+
+464 local source/desktop tests passed without skips, including preview cycling/source preservation, invalid-region fallback, bounded stage typography, and a fraction-neighbor veto. A matching Windows source suite, offline frozen reader checks, navigation and executable export are required before delivery. The unchanged export/finance workflow retains the v54 reference-preservation results: 309 selected images and 13 financial pages; original source conflicts remain case-specific review work.
+
+The planned company work-laptop trial will measure compatibility, first-time usability, review effort and elapsed time. Financial policy is unchanged. Similar containers never establish a physical trip; insufficient trip evidence remains unresolved.
+
+## Historical validation
+
 # v54 - Photo Coverage and Load-Card Validation
 
 November 12, 2026. Supplied-data developer validation; no new vendor files are required for this pass.

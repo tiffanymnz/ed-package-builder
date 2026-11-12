@@ -12,8 +12,8 @@ Build an Excessive Debris package from vendor photos, bids, invoice and RBB docu
 
 Read START_HERE.md for the workflow.
 
-**Current source: v54 photo coverage and card-reading update.** All 459 local source and desktop tests passed without skips. Match a distributed executable to its successful Windows workflow and included validation record.
+**Current source: v55 stage-reading and card-inspection refinement.** Adds bounded Full/Empty word reads with a nearby-fraction safeguard and a Card Detail control in load-card review. All 464 local source/desktop tests passed without skips; match the distributed executable to its successful Windows run and delivery validation record.
 
-On 88 scored photos excluded from the v54 category-head fit, correct suggestions increased from 41 to 64 and withheld suggestions fell from 46 to 23; one suggestion remained wrong. On ten positive card examples, correct load numbers increased from three to seven, with three withheld and none wrong. The gain came from development card examples; the separate three-card check did not improve. Seven negative controls produced no false load or stage claim.
+The broad classifier is unchanged. Reinspection corrected one mislabeled exterior photo in the 90-photo v54 selection: the corrected result is 65 correct suggestions and 23 withheld across 88 scored photos. This is a reference correction, not a new sorting gain. Additional crop, angle, tape-focus and detector experiments were rejected when they added mistakes, processing cost or unrelated review work.
 
-These results describe the supplied samples, not universal accuracy. Container recognition and physical-trip assignment remain separate: similar containers can be grouped for review, but distinct trips require checked evidence. Unresolved trip assignments remain unresolved. See RELEASE_VALIDATION.md for scope and remaining review work. The planned work-laptop trial will measure actual staff efficiency.
+Suggestions still need review. Container recognition and physical-trip assignment remain separate; unresolved trips remain unresolved. See RELEASE_VALIDATION.md for the test scope and retained limitations. The planned work-laptop trial measures actual staff efficiency.

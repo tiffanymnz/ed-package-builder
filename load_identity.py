@@ -8,7 +8,7 @@ from calculator_evidence import file_digest
 from load_text_runtime import MODEL_DIGEST,RUNTIME
 from small_vision_runtime import SetupCancelled
 
-VERSION=9
+VERSION=10
 LABEL=re.compile(r'^\s*load\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 FOCUSED_LABEL=re.compile(r'^\s*l[oa]{2}d\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 
@@ -170,6 +170,17 @@ def read_load_card(path,base_text,cancel,runtime=None):
     image=ImageOps.exif_transpose(original).convert('RGB')
    line=runtime.read(image,'text',cancel,max_tokens=40)
    readings.append(dict(engine='florence',view='whole_text_check',loads=[] if line.get('truncated') else text_numbers(line.get('text','').strip(),focused=True),text=line.get('text','')[:300],incomplete=bool(line.get('truncated'))))
+ # Only an established load clue justifies stage-only line retries. Derived
+ # stage views cannot introduce or alter a load number or trip assignment.
+ from stage_text import evidence as existing_stage
+ if len(combine_readings(readings)['options'])==1 and not existing_stage(readings)['options']:
+  from handwriting_reader import reader_for
+  from card_reading_views import stage_word_readings
+  small=reader_for(runtime.root) if getattr(runtime,'root',None) is not None else None
+  if small and small.ready():
+   for i,crop in enumerate(card_crops(path,detected)):
+    if cancel.is_set():raise SetupCancelled()
+    for clue in stage_word_readings(crop,small):readings.append(dict(clue,view=f'card-{i}-'+clue['view']))
  if before!=file_digest(path):raise ValueError('Photo changed during load-card reading.')
  result=combine_readings(readings)
  from stage_text import evidence as stage_evidence

@@ -17,3 +17,5 @@
 **Recover an interrupted export:** Tools > Recover Interrupted Export restores the previous complete export set. Tools > Storage and Performance shows local storage and cached review-preparation timing, which is not staff-efficiency timing.
 
 **Hidden a card?** Review Load Cards > Show Hidden Cards lets you inspect and restore it.
+
+**Load-card close-up:** In Review Load Cards, choose Card Detail to cycle the detected areas without manually hunting across the photo. Choose Fit to see the entire photo again. These areas are navigation aids; check the visible number and stage before confirming.

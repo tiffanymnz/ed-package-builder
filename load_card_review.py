@@ -59,7 +59,7 @@ class CardReviewWindow:
         if key==self.shown_key:return
         self.shown_key=key
         for child in self.right.winfo_children():child.destroy()
-        self.preview=PhotoPane(self.right,row['path']);self.preview.pack(fill='both',expand=True)
+        self.preview=PhotoPane(self.right,row['path'],card_regions=row.get('card_regions',[]));self.preview.pack(fill='both',expand=True)
         from card_evidence import reviewed_card_mapping
         mapped=row.get('reviewed_load') or reviewed_card_mapping(self.case,row['path'])
         self.number.set(str(mapped) if mapped else '')
