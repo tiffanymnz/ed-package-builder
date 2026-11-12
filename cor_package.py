@@ -189,10 +189,12 @@ def document_suggestions(record):
     suggestions=[dict(path=str(path), name=record.get('name',path.name), role=g['role'],
                  pages=f"{g['start']}-{g['end']}", confirmed=False, amount='', vendor='') for g in groups]
     if path.suffix.lower()=='.pdf':
+        from calculator_evidence import file_digest
+        suggested_sha=record.get('sha256') or file_digest(path)
         with fitz.open(path) as doc:
             for item,group in zip(suggestions,groups):
                 values=extract_costs('\n'.join(doc[i].get_text() for i in range(group['start']-1,group['end'])))
-                item['cost_suggestions']=values
+                item['cost_suggestions']=values;item['cost_suggestions_sha256']=suggested_sha
                 if item['role']=='bid':item['amount']=values.get('invoice_amount_usd','')
     return suggestions
 
@@ -205,7 +207,7 @@ def apply_document_text_suggestions(case):
         try:
             if cached['sha256']!=file_digest(path):continue
         except OSError:continue
-        values=extract_costs(cached['text']);document['cost_suggestions']=values
+        values=extract_costs(cached['text']);document['cost_suggestions']=values;document['cost_suggestions_sha256']=cached['sha256']
         if document.get('confirmed'):continue
         role=classify_document(cached['text'])
         if document.get('role')=='other' and role!='other':document['role']=role

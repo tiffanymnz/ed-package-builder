@@ -1,3 +1,17 @@
+# v57 - Broader Developer Acceptance
+
+November 12, 2026. This pass examines first-run guidance, vendor intake, document review, repeated use, interrupted operations, source changes and saved-project recovery in addition to the existing load/cost/export suite.
+
+The initial eight new checks reproduced seven failures and one error in v56: cancelled close/export/save recovery, unreachable short-window document confirmation, accumulated wheel handlers and missing-invoice page loading. These are concrete software defects; their fixes are covered by regression checks.
+
+The expanded suite adds responsive import, source-byte preservation, duplicates, size limits, ZIP path safety, cancellation cleanup, commit rollback, stale invoice-suggestion rejection, damaged optional-cache round trips and long-progress-message cancellation visibility. Actual Tk event processing is exercised. Local and exact matching Windows totals are recorded in the delivered validation report.
+
+The frozen interface gate now also runs actual vendor import and duplicate skipping, opens the imported unconfirmed document at 640 × 420, checks reachable confirmation and scrollable details, and captures first-run/document screenshots. Synthetic UI clues test behavior, not recognition accuracy. Native offline inference remains a separate gate.
+
+The developer acceptance matrix is in DEVELOPER_ACCEPTANCE.md. The release cannot be distributed as verified until the matching Windows source suite, frozen readers, interface and DOCX/PDF export all pass and downloaded bytes are verified. No changes to models, thresholds or financial rules are made. Prior recognition results below remain applicable; no new recognition-accuracy gain is claimed.
+
+## Historical validation
+
 # v56 - Card Review and Recovery Validation
 
 November 12, 2026. This update addresses verified workflow defects; recognition models, thresholds and financial rules are unchanged.

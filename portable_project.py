@@ -81,6 +81,15 @@ def atomic_copy(source,destination):
     finally:
         if Path(temporary).exists():Path(temporary).unlink()
 
+def photo_cache(case,root):
+    """An optional analysis cache must not prevent saving original evidence."""
+    try:
+        cached=json.loads((Path(root)/'local_photo_sorting.json').read_text(encoding='utf-8'))
+        if isinstance(cached,dict):return cached
+    except (OSError,ValueError):pass
+    cached=case.get('local_photo_results',{})
+    return cached if isinstance(cached,dict) else {}
+
 def export_project(case,root,destination,cancel=None,progress=None):
     def checkpoint(message):
         if cancel is not None and cancel.is_set():raise InterruptedError('Project saving cancelled. Your previous saved file is unchanged.')
@@ -97,7 +106,7 @@ def export_project(case,root,destination,cancel=None,progress=None):
             checkpoint(f'Checking File {i} of {len(files)}')
             manifest[path.relative_to(root).as_posix()]=file_digest(path)
         cache=root/'local_photo_sorting.json'
-        cache_bytes=json.dumps(portable_data(json.loads(cache.read_text(encoding='utf-8')),root)).encode() if cache.is_file() else None
+        cache_bytes=json.dumps(portable_data(photo_cache(case,root),root)).encode() if cache.is_file() else None
         if cache_bytes is not None:manifest['local_photo_sorting.json']=hashlib.sha256(cache_bytes).hexdigest()
         from cor_package import bid_fingerprint
         bid_valid=bool(case.get('bid_review_confirmed') and case.get('bid_confirmation_hash')==bid_fingerprint(case))

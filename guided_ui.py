@@ -234,8 +234,11 @@ class GuidedApp(App):
     def card(self, parent, title, description=None):
         card = ttk.Frame(parent, style='Card.TFrame', padding=20)
         card.pack(fill='x', pady=(0, 14))
-        ttk.Label(card, text=title, style='Section.TLabel').pack(anchor='w')
-        if description: ttk.Label(card, text=description, style='Card.TLabel', foreground=MUTED, wraplength=610).pack(anchor='w', pady=(6, 12))
+        heading=ttk.Label(card,text=title,style='Section.TLabel',wraplength=610);heading.pack(fill='x')
+        heading.bind('<Configure>',lambda e:heading.configure(wraplength=max(180,e.width)))
+        if description:
+            detail=ttk.Label(card,text=description,style='Card.TLabel',foreground=MUTED,wraplength=610);detail.pack(fill='x',pady=(6,12))
+            detail.bind('<Configure>',lambda e:detail.configure(wraplength=max(180,e.width)))
         return card
 
     def scroll_page(self, tab):
@@ -248,13 +251,24 @@ class GuidedApp(App):
         item = canvas.create_window((0, 0), window=content, anchor='nw')
         content.bind('<Configure>', lambda event: canvas.configure(scrollregion=canvas.bbox('all')))
         canvas.bind('<Configure>', lambda event: canvas.itemconfigure(item, width=event.width))
-        def wheel(event):
-            widget = self.root.winfo_containing(event.x_root, event.y_root)
-            while widget is not None:
-                if widget == content or widget == canvas:
-                    canvas.yview_scroll(int(-event.delta/120) or (-1 if event.delta > 0 else 1), 'units'); break
-                widget = getattr(widget, 'master', None)
-        tab.bind_all('<MouseWheel>', wheel, add='+')
+        # One dispatcher per application, with destroyed pages removed. Rebuilding
+        # a page must not leave global callbacks referencing its old widgets.
+        pages=getattr(self,'_scroll_pages',None)
+        if pages is None:
+            self._scroll_pages={};pages=self._scroll_pages
+            def wheel(event):
+                widget=self.root.winfo_containing(event.x_root,event.y_root)
+                while widget is not None:
+                    target=self._scroll_pages.get(widget)
+                    if target is not None:
+                        step=-1 if getattr(event,'num',None)==4 else 1 if getattr(event,'num',None)==5 else int(-event.delta/120) or (-1 if event.delta>0 else 1)
+                        target.yview_scroll(step,'units');return 'break'
+                    widget=getattr(widget,'master',None)
+            for sequence in ('<MouseWheel>','<Button-4>','<Button-5>'):self.root.bind_all(sequence,wheel,add='+')
+        pages[content]=canvas;pages[canvas]=canvas
+        def forget(event):
+            if event.widget==canvas:pages.pop(content,None);pages.pop(canvas,None)
+        canvas.bind('<Destroy>',forget,add='+')
         return content
 
     def field(self, parent, label, key, value, row, column=0, width=25):

@@ -23,3 +23,9 @@
 **Card review that stays current:** Incoming readings appear while you review a card and preserve fields you have edited. A possible stage is a suggestion: inspect the photo, choose Use Suggested Stage if it is correct, select the actual package load and confirm. A vendor's printed load number does not assign your package load automatically.
 
 **Finished or interrupted card review:** Confirmed cards leave the pending list; Show Reviewed Cards lets you edit them later. If reading pauses with an error, Retry Card Reading retries failed and remaining cards. Cancelling a case dialog resumes the current case's background processing.
+
+**Large imports:** Import Folder and Import ZIPs show progress while preparing the files. Cancel leaves the current case unchanged; exact duplicate files are skipped. Warnings identify files that could not be imported. Review and confirm the document purposes after import.
+
+**Document review on a smaller screen:** Scroll the details; Cancel and Confirm Document stay at the bottom of the window. Escape closes the dialog without confirming it.
+
+**Interrupted work:** Cancelling an export or declining to close resumes background photo processing. If an optional analysis cache is damaged, saved projects keep the original evidence and usable in-memory results.

@@ -1,3 +1,13 @@
+# v57 - Developer Workflow Acceptance
+
+- Vendor folder/ZIP imports prepare files and PDF document suggestions off the interface thread. Cancel leaves the case unchanged; commit failures roll back newly moved files. Original bytes, exact duplicate detection and import limits are preserved.
+- The document dialog has scrollable details, responsive sizing, Cancel/Escape and a fixed confirmation footer. Card descriptions wrap to available width. First-run instructions follow the actual create/import/review/export order.
+- One scrolling dispatcher replaces callbacks accumulated by repeated refreshes; destroyed pages are removed.
+- Export cancellation, declined draft export, failed project save and cancelled closing resume current-case photo processing.
+- Missing invoice sources no longer break page creation. Changed invoice sources cannot refill empty fields from source-bound old cost suggestions. A damaged optional analysis cache falls back to in-memory results so original evidence and progress can still be saved.
+- Recognition models, thresholds, physical-trip rules and financial policy are unchanged. No accuracy increase or staff-efficiency percentage is claimed.
+- See DEVELOPER_ACCEPTANCE.md and RELEASE_VALIDATION.md for the checked workflow and Windows delivery gate.
+
 # v56 - Smoother Card Review and Reliable Recovery
 
 - Incoming source-checked card readings update the open form without recreating its preview or overwriting manually edited fields. Possible stages are visible; Use Suggested Stage requires an explicit choice before confirmation. Suggested numbers never assign a physical trip automatically.

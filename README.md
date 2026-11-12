@@ -12,7 +12,7 @@ Build an Excessive Debris package from vendor photos, bids, invoice and RBB docu
 
 Read START_HERE.md for the workflow.
 
-**Current source: v56 card-review and recovery fixes.** Incoming card readings update the open form while preserving your edits. The pending queue excludes confirmed cards, suggested stages require an explicit choice, and failed reading batches can be retried without repeating successful work. Cancelled case dialogs resume background work. All 476 local source/desktop tests passed; the distributed executable must match a successful Windows run and its delivery validation record.
+**Current source: v57 developer workflow acceptance.** Adds responsive cancellable vendor import, keeps document confirmation reachable in short windows, and fixes interruption recovery, repeated scrolling callbacks, missing-invoice page loading and optional-cache save failures. The first-run instructions match the import-first workflow. Recognition models and financial rules are unchanged. The release validation identifies the matching Windows build and scope.
 
 The broad classifier is unchanged. Reinspection corrected one mislabeled exterior photo in the 90-photo v54 selection: the corrected result is 65 correct suggestions and 23 withheld across 88 scored photos. This is a reference correction, not a new sorting gain. Additional crop, angle, tape-focus and detector experiments were rejected when they added mistakes, processing cost or unrelated review work.
 

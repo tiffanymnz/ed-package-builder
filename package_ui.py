@@ -88,6 +88,12 @@ class PackageApp(GuidedApp):
             else:subprocess.Popen(['open' if sys.platform=='darwin' else 'xdg-open',str(path)])
         except Exception as exc:messagebox.showerror('Cannot Open Source',str(exc))
 
+    def empty(self,tab):
+        self.clear(tab)
+        card=self.card(tab,'Start Your ED Package','Create a case with the case number and vendor, then import the folder or ZIP you received. Review the documents, loads and costs before exporting your package.')
+        ttk.Button(card,text='Create Case',style='Primary.TButton',command=self.new_case).pack(anchor='w',pady=(12,8))
+        ttk.Button(card,text='Open Project',command=self.open_case).pack(anchor='w')
+
     def help(self):
         messagebox.showinfo('Using ED Package Builder','1. Import Files: add vendor photos, invoices and bids. Confirm each document purpose.\n\n2. Review Loads: group and select photos, match load evidence, then check container measurements and attach the cubic yard calculation.\n\n3. Review Costs: check the invoice figures, first-10 amount and lowest bid.\n\n4. Create Package: resolve missing items and export the combined PDF. Open Output Folder shows your saved files.\n\nSave Project keeps a portable file with your originals and progress. Open it to continue later. New cases use temporary working folders, removed when the session closes.')
 
@@ -116,23 +122,25 @@ class PackageApp(GuidedApp):
         if self.finish_photo_work(self.save_project):return False
         if any(window.running for window in getattr(self,'_photo_sorting_windows',[])) or self.scan_running:
             messagebox.showinfo('Processing in Progress','Stop photo sorting and wait for the current photo or text reading to finish before saving the portable project.');return False
-        from portable_project import export_project,fingerprint
-        self.save()
-        cache=self.case_dir/'local_photo_sorting.json'
-        if cache.is_file():self.case['local_photo_results']=json.loads(cache.read_text(encoding='utf-8'))
-        path=filedialog.asksaveasfilename(title='Save Project to Resume Later',defaultextension='.edcase',initialfile=self._project_file.name if self._project_file else safe(self.case['case_number'])+'.edcase',initialdir=str(self._project_file.parent) if self._project_file else str(Path.home()),filetypes=[('ED Project','*.edcase')])
-        if not path:self.start_photo_work();return False
         try:
-            self.status.set('Saving project... Large photo sets may take a moment.');self.root.update_idletasks()
-            from background_task import run_file_task
-            self._file_task_running=True
-            try:run_file_task(self.root,'Saving Project',lambda cancel,progress:export_project(self.case,self.case_dir,path,cancel=cancel,progress=progress))
-            finally:self._file_task_running=False
-            self._project_file=Path(path);self._saved_project_fingerprint=fingerprint(self.case,self.case_dir)
-            self.status.set('Project saved: '+str(path));return True
-        except InterruptedError:
-            self.status.set('Saving cancelled. Your previous saved project is unchanged.');return False
-        except Exception as exc:messagebox.showerror('Cannot Save Project',str(exc));return False
+            from portable_project import export_project,fingerprint,photo_cache
+            self.save()
+            cache=self.case_dir/'local_photo_sorting.json'
+            if cache.is_file():self.case['local_photo_results']=photo_cache(self.case,self.case_dir)
+            path=filedialog.asksaveasfilename(title='Save Project to Resume Later',defaultextension='.edcase',initialfile=self._project_file.name if self._project_file else safe(self.case['case_number'])+'.edcase',initialdir=str(self._project_file.parent) if self._project_file else str(Path.home()),filetypes=[('ED Project','*.edcase')])
+            if not path:return False
+            try:
+                self.status.set('Saving project... Large photo sets may take a moment.');self.root.update_idletasks()
+                from background_task import run_file_task
+                self._file_task_running=True
+                try:run_file_task(self.root,'Saving Project',lambda cancel,progress:export_project(self.case,self.case_dir,path,cancel=cancel,progress=progress))
+                finally:self._file_task_running=False
+                self._project_file=Path(path);self._saved_project_fingerprint=fingerprint(self.case,self.case_dir)
+                self.status.set('Project saved: '+str(path));return True
+            except InterruptedError:
+                self.status.set('Saving cancelled. Your previous saved project is unchanged.');return False
+            except Exception as exc:messagebox.showerror('Cannot Save Project',str(exc));return False
+        finally:self.start_photo_work()
 
     def prepare_leave(self):
         if getattr(self,'_file_task_running',False):return False
@@ -194,7 +202,7 @@ class PackageApp(GuidedApp):
     def close_app(self):
         if getattr(self,'_file_task_running',False):return
         if self.finish_photo_work(self.close_app):return
-        if not self.prepare_leave():return
+        if not self.prepare_leave():self.start_photo_work();return
         if self.case:self.save()
         self.release_temporary_case();self.root.destroy()
         from small_vision_runtime import RUNTIME
@@ -204,14 +212,17 @@ class PackageApp(GuidedApp):
         if getattr(self,'_file_task_running',False):return
         if self.finish_photo_work(self.new_case):return
         if self.case: self.save()
-        win=tk.Toplevel(self.root);win.title('New Case');win.geometry('480x330');win.transient(self.root);win.grab_set()
-        body=ttk.Frame(win,padding=24);body.pack(fill='both',expand=True)
+        win=tk.Toplevel(self.root);win.title('New Case');win.transient(self.root);fit_window(win,self.root,(520,420),(480,320));win.grab_set()
+        actions=ttk.Frame(win,padding=(24,16));actions.pack(side='bottom',fill='x')
+        content=ttk.Frame(win);content.pack(fill='both',expand=True)
+        body=self.scroll_page(content);body.configure(padding=24)
         ttk.Label(body,text='Create a Case',font=(self.ui_font,20,'bold')).pack(anchor='w')
         ttk.Label(body,text='Just the essentials. Add files next.',style='Muted.TLabel').pack(anchor='w',pady=(6,20))
-        values={}
+        values={};first_entry=None
         for label,key in [('Case Number','case_number'),('Vendor','vendor')]:
             row=ttk.Frame(body);row.pack(fill='x',pady=8);ttk.Label(row,text=label,width=15).pack(side='left')
-            var=tk.StringVar();values[key]=var;ttk.Entry(row,textvariable=var).pack(side='left',fill='x',expand=True)
+            var=tk.StringVar();values[key]=var;entry=ttk.Entry(row,textvariable=var);entry.pack(side='left',fill='x',expand=True)
+            if first_entry is None:first_entry=entry
         previous_case=self.case
         def cancel():
             win.destroy()
@@ -226,7 +237,7 @@ class PackageApp(GuidedApp):
             self._project_file=None;self._saved_project_fingerprint=None
             self.case=make_case(case,'',vendor,1,'');self.case['verified_first_10_amount']=''
             self.case_dir=directory;self.vars={};self.save();self.refresh();self.go(0);win.destroy()
-        actions=ttk.Frame(body);actions.pack(fill='x',pady=22)
+        first_entry.focus_set();win.bind('<Return>',lambda event:create())
         ttk.Button(actions,text='Cancel',command=cancel).pack(side='left')
         ttk.Button(actions,text='Create Case',style='Primary.TButton',command=create).pack(side='right')
 
@@ -260,17 +271,33 @@ class PackageApp(GuidedApp):
         tree.bind('<Double-1>',lambda event:self.edit_document())
 
     def _import_paths(self, files):
-        super()._import_paths(files)
-        existing={item['path'] for item in self.case.get('package_documents',[])}
-        for item in self.case.get('imported_files',[]):
-            if item['path'] in existing or Path(item['path']).suffix.lower() not in ('.pdf','.docx','.txt'):continue
-            try:self.case.setdefault('package_documents',[]).extend(document_suggestions(item))
-            except Exception:self.case.setdefault('package_documents',[]).append(dict(path=item['path'],name=item['name'],role='other',pages='',confirmed=False,amount='',vendor=''))
-        suggestions=[photo_suggestion(item) for item in self.case.get('imported_files',[]) if Path(item['path']).suffix.lower() in IMAGE_EXT]
-        self.case['photo_suggestions']=suggestions
-        self.save();self.refresh();self.go(0)
-        self.status.set('Files Imported. Review the document rows, then continue to Review Loads.')
-        self.start_photo_work()
+        if getattr(self,'_file_task_running',False) or not self.require():return False
+        import tempfile
+        from evidence_intake import stage_import,commit_import
+        from background_task import run_file_task
+        self.save();case=self.case
+        try:
+            with tempfile.TemporaryDirectory(prefix='.ed-import-',dir=self.case_dir) as staging:
+                existing={r['sha256'] for r in case.get('imported_files',[]) if r.get('sha256')}
+                self._file_task_running=True
+                try:result=run_file_task(self.root,'Importing Vendor Files',lambda cancel,progress:dict(stage_import(files,existing,staging,cancel,progress),cancel=cancel))
+                finally:self._file_task_running=False
+                if self.case is not case:raise ValueError('The case changed before import finished.')
+                if result['cancel'].is_set():raise InterruptedError('Import cancelled.')
+                records,documents=commit_import(result,self.case_dir/'originals')
+                case.setdefault('imported_files',[]).extend(records)
+                case.setdefault('package_documents',[]).extend(documents)
+            case['photo_suggestions']=[photo_suggestion(r) for r in case.get('imported_files',[]) if Path(r['path']).suffix.lower() in IMAGE_EXT]
+            self.save();self.refresh();self.go(0)
+            if result['issues']:
+                try:(self.case_dir/'import_warnings.txt').write_text('\n'.join(result['issues']),encoding='utf-8')
+                except OSError:pass
+            self.status.set(f"Files Imported · {len(records)} Added · {result['duplicates']} Exact Duplicates · {len(result['issues'])} Warnings")
+            messagebox.showinfo('Import Complete',f"Files added: {len(records)}\nExact duplicates skipped: {result['duplicates']}\nWarnings: {len(result['issues'])}"+('\n\n'+ '\n'.join(result['issues'][:5]) if result['issues'] else '')+'\n\nReview document purposes, then continue to Review Loads.')
+            return True
+        except InterruptedError:self.status.set('Import cancelled. No new files were added.');return False
+        except Exception as exc:messagebox.showerror('Cannot Import Files',str(exc));return False
+        finally:self.start_photo_work()
 
     def add_bid(self):
         self.add_document(purpose='bid')
@@ -280,7 +307,7 @@ class PackageApp(GuidedApp):
         paths=filedialog.askopenfilenames(title='Add Bid Files' if purpose=='bid' else 'Add Invoices, Bids or Supporting Documents',filetypes=[('Images and Documents','*.pdf *.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff *.docx')])
         if not paths:return
         digests={hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths}
-        self._import_paths([Path(p) for p in paths])
+        if not self._import_paths([Path(p) for p in paths]):return
         indices=[]
         for record in self.case.get('imported_files',[]):
             if record.get('sha256') in digests:indices.append(self.register_document(record['path']))
@@ -316,9 +343,12 @@ class PackageApp(GuidedApp):
         try:opened_digest=file_digest(item['path'])
         except OSError as exc:messagebox.showerror('Cannot Review Document',str(exc));return
         reviewed_case=self.case
-        win=tk.Toplevel(self.root);win.title('Review Package Document');win.geometry('640x560');win.transient(self.root);win.grab_set()
-        body=ttk.Frame(win,padding=24);body.pack(fill='both',expand=True)
-        ttk.Label(body,text=item.get('name','Document'),font=(self.ui_font,13,'bold'),wraplength=570).pack(anchor='w',pady=(0,10))
+        win=tk.Toplevel(self.root);win.title('Review Package Document');win.transient(self.root);fit_window(win,self.root,(680,650),(560,400));win.grab_set()
+        footer=ttk.Frame(win,padding=(20,12));footer.pack(side='bottom',fill='x')
+        content=ttk.Frame(win);content.pack(fill='both',expand=True)
+        body=self.scroll_page(content);body.configure(padding=24)
+        title=ttk.Label(body,text=item.get('name','Document'),font=(self.ui_font,13,'bold'),wraplength=570);title.pack(fill='x',pady=(0,10))
+        title.bind('<Configure>',lambda e:title.configure(wraplength=max(200,e.width)))
         def open_source():
             import os,sys,subprocess
             try:
@@ -368,7 +398,9 @@ class PackageApp(GuidedApp):
             if split:self.case['package_documents'].append(record)
             else:self.case['package_documents'][index]=record
             self.case['bid_review_confirmed']=False;self.save();self.draw_case();win.destroy()
-        row=ttk.Frame(body);row.pack(fill='x',pady=20)
+        row=footer
+        ttk.Button(row,text='Cancel',command=win.destroy).pack(side='left',padx=(0,8))
+        win.bind('<Escape>',lambda event:win.destroy())
         ttk.Button(row,text='Add as Another Section',command=lambda:confirm(True)).pack(side='left')
         ttk.Button(row,text='Confirm Document',style='Primary.TButton',command=confirm).pack(side='right')
 
@@ -683,11 +715,18 @@ class PackageApp(GuidedApp):
         invoices=[d for d in self.case.get('package_documents',[]) if d.get('role')=='invoice']
         suggestions={}
         if len(invoices)==1:
-            invoice=invoices[0];suggestions=dict(invoice.get('cost_suggestions',{}))
+            invoice=invoices[0]
+            from calculator_evidence import file_digest
+            try:current_sha=file_digest(invoice['path'])
+            except OSError:current_sha=None
+            expected=invoice.get('cost_suggestions_sha256') or invoice.get('reviewed_sha256') or next((r.get('sha256') for r in self.case.get('imported_files',[]) if r['path']==invoice['path']),None)
+            if current_sha and (not expected or current_sha==expected):suggestions=dict(invoice.get('cost_suggestions',{}))
             cached=self.case.get('photo_text_cache',{}).get(invoice['path'],{})
             if cached.get('text'):
                 from calculator_evidence import file_digest
-                if cached.get('sha256')==file_digest(invoice['path']):suggestions.update(extract_costs(cached['text']))
+                try:current=cached.get('sha256')==file_digest(invoice['path'])
+                except OSError:current=False
+                if current:suggestions.update(extract_costs(cached['text']))
             for key,value in suggestions.items():
                 if self.case.get(key) in ('',None):self.case[key]=value
         content=self.scroll_page(self.finance_tab);self.finance_displays={}
@@ -950,40 +989,42 @@ class PackageApp(GuidedApp):
         if getattr(self,'_file_task_running',False):return
         if not self.require():return
         if self.finish_photo_work(self.generate):return
-        self.save();issues=self.evaluate()[3]
-        if issues and not messagebox.askyesno('Incomplete Package','Some items still need review. Export the available documents anyway? Missing items remain listed in the app and will not be printed in the PDF.'):return
-        destination=None
-        if self._case_temp is not None:
-            destination=filedialog.asksaveasfilename(title='Save COR Package',defaultextension='.pdf',initialfile=safe(self.case['case_number'])+'_COR_Package.pdf',filetypes=[('PDF','*.pdf')])
-            if not destination:return
-            if Path(destination).resolve().is_relative_to(self.case_dir.resolve()):
-                messagebox.showwarning('Choose a Saved Location','Choose a folder outside the temporary workspace so the exported PDF stays saved.');return
-        folder=self.case_dir/'output';folder.mkdir(exist_ok=True)
         try:
-            import copy
-            from background_task import run_file_task
-            snapshot=copy.deepcopy(self.case)
-            def create_package(cancel,progress):
-                staged=folder/(safe(snapshot['case_number'])+'_COR_PACKAGE_DRAFT.pdf')
-                report=assemble(snapshot,staged,issues,cancel=cancel,progress=progress)
-                if destination:
-                    if cancel.is_set():raise InterruptedError('Package creation cancelled.')
-                    from export_bundle import publish_bundle
-                    progress('Saving to your chosen folder...')
-                    text=folder/'COR_Request_Description.txt'
-                    publish_bundle([(Path(destination),staged),
-                                    (Path(destination).with_suffix('.description.txt'),text if text.is_file() else None),
-                                    (Path(destination).with_suffix('.review.json'),folder/'Package_Review.json')])
-                return report
-            self._file_task_running=True
-            try:report=run_file_task(self.root,'Creating COR Package',create_package)
-            finally:self._file_task_running=False
-            if destination:self.status.set('Package saved: '+str(destination))
-            self._last_export_case_dir=self.case_dir
-            self._last_export_folder=Path(destination).parent if destination else folder
-            saved_pdf=Path(destination) if destination else folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf')
-            self.status.set('Package saved: '+str(saved_pdf))
-            self.export_result(report,saved_pdf)
-        except InterruptedError:self.status.set('Package creation cancelled. Your previous saved package is unchanged.')
-        except Exception as exc:messagebox.showerror('Package Export Failed',str(exc))
+            self.save();issues=self.evaluate()[3]
+            if issues and not messagebox.askyesno('Incomplete Package','Some items still need review. Export the available documents anyway? Missing items remain listed in the app and will not be printed in the PDF.'):return
+            destination=None
+            if self._case_temp is not None:
+                destination=filedialog.asksaveasfilename(title='Save COR Package',defaultextension='.pdf',initialfile=safe(self.case['case_number'])+'_COR_Package.pdf',filetypes=[('PDF','*.pdf')])
+                if not destination:return
+                if Path(destination).resolve().is_relative_to(self.case_dir.resolve()):
+                    messagebox.showwarning('Choose a Saved Location','Choose a folder outside the temporary workspace so the exported PDF stays saved.');return
+            folder=self.case_dir/'output';folder.mkdir(exist_ok=True)
+            try:
+                import copy
+                from background_task import run_file_task
+                snapshot=copy.deepcopy(self.case)
+                def create_package(cancel,progress):
+                    staged=folder/(safe(snapshot['case_number'])+'_COR_PACKAGE_DRAFT.pdf')
+                    report=assemble(snapshot,staged,issues,cancel=cancel,progress=progress)
+                    if destination:
+                        if cancel.is_set():raise InterruptedError('Package creation cancelled.')
+                        from export_bundle import publish_bundle
+                        progress('Saving to your chosen folder...')
+                        text=folder/'COR_Request_Description.txt'
+                        publish_bundle([(Path(destination),staged),
+                                        (Path(destination).with_suffix('.description.txt'),text if text.is_file() else None),
+                                        (Path(destination).with_suffix('.review.json'),folder/'Package_Review.json')])
+                    return report
+                self._file_task_running=True
+                try:report=run_file_task(self.root,'Creating COR Package',create_package)
+                finally:self._file_task_running=False
+                if destination:self.status.set('Package saved: '+str(destination))
+                self._last_export_case_dir=self.case_dir
+                self._last_export_folder=Path(destination).parent if destination else folder
+                saved_pdf=Path(destination) if destination else folder/(safe(self.case['case_number'])+'_COR_PACKAGE_DRAFT.pdf')
+                self.status.set('Package saved: '+str(saved_pdf))
+                self.export_result(report,saved_pdf)
+            except InterruptedError:self.status.set('Package creation cancelled. Your previous saved package is unchanged.')
+            except Exception as exc:messagebox.showerror('Package Export Failed',str(exc))
+        finally:self.start_photo_work()
 

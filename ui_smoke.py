@@ -11,8 +11,7 @@ def run(report_path):
         with tempfile.TemporaryDirectory(prefix='ed-ui-smoke-') as folder:
             root=tk.Tk();errors=[];root.report_callback_exception=lambda *args:errors.append(str(args[1]))
             app=PackageApp(root);app.start_photo_work=lambda:None
-            app.case=make_case('UI-SMOKE','','Synthetic Test Vendor',1,35);app.case_dir=Path(folder)
-            app.refresh();from ui_windows import fit_window,work_area
+            from ui_windows import fit_window,work_area
             fit_window(root,root,(1000,740),(900,600));root.update();titles=[]
             def capture(name,window):
                 if sys.platform!='win32':return
@@ -24,6 +23,16 @@ def run(report_path):
                     result.setdefault('synthetic_screenshots',[]).append(name+'.png')
                 except Exception as exc:result.setdefault('screenshot_warnings',[]).append(type(exc).__name__)
 
+            capture('first-run',root)
+            app.new_case();root.update()
+            new=next(w for w in root.winfo_children() if isinstance(w,tk.Toplevel) and w.title()=='New Case')
+            def initial_widgets(parent):
+                for w in parent.winfo_children():yield w;yield from initial_widgets(w)
+            create=next(w for w in initial_widgets(new) if w.winfo_class()=='TButton' and w.cget('text')=='Create Case')
+            assert create.winfo_ismapped() and create.winfo_rooty()+create.winfo_height()<=new.winfo_rooty()+new.winfo_height(),'New Case action is hidden'
+            capture('new-case',new)
+            next(w for w in initial_widgets(new) if w.winfo_class()=='TButton' and w.cget('text')=='Cancel').invoke();root.update()
+            app.case=make_case('UI-SMOKE','','Synthetic Test Vendor',1,35);app.case_dir=Path(folder);app.refresh();root.update()
             for step,expected in enumerate(('Import Files','Review Loads','Review Costs','Create Package')):
                 app.go(step);root.update();title=app.page_title.get();titles.append(title)
                 assert title==expected,'Incorrect workflow page'
@@ -81,6 +90,33 @@ def run(report_path):
             assert file_digest(path)==sha,'Card review altered the original photo'
             capture('cards-reviewed',cards.win);cards.close();root.update()
             result['card_review_checks']=['live_suggestions','manual_values_preserved','explicit_stage_choice','completed_queue','reopen_reviewed_card','original_unchanged']
+            # Run the actual packaged import path, then inspect its document
+            # confirmation at a short window height. No source data is used.
+            import fitz
+            from tkinter import messagebox
+            bid=Path(folder)/'Synthetic Vendor Bid for Review.pdf'
+            with fitz.open() as doc:
+                doc.new_page().insert_text((40,40),'BID\nTOTAL $1,400.00\n40 CYD');doc.save(bid)
+            original=bid.read_bytes();notice=messagebox.showinfo
+            try:
+                messagebox.showinfo=lambda *a,**k:None
+                assert app._import_paths([bid]),'Packaged vendor import failed'
+                count=len(app.case['imported_files'])
+                assert app._import_paths([bid]) and len(app.case['imported_files'])==count,'Exact duplicate import was not skipped'
+            finally:messagebox.showinfo=notice
+            document=next(d for d in app.case['package_documents'] if d.get('name')==bid.name)
+            assert Path(document['path']).read_bytes()==original and not document['confirmed'],'Import changed or confirmed a source'
+            index=app.case['package_documents'].index(document);app.documents.selection_set(str(index));app.edit_document();root.update()
+            dialog=next(w for w in root.winfo_children() if isinstance(w,tk.Toplevel) and w.title()=='Review Package Document');dialog.geometry('640x420');root.update()
+            def descendants(parent):
+                for w in parent.winfo_children():yield w;yield from descendants(w)
+            confirm=next(w for w in descendants(dialog) if w.winfo_class()=='TButton' and w.cget('text')=='Confirm Document')
+            assert confirm.winfo_ismapped() and confirm.winfo_rooty()+confirm.winfo_height()<=dialog.winfo_rooty()+dialog.winfo_height(),'Document confirmation is not reachable'
+            capture('document-review-short',dialog)
+            canvas=next(w for w in descendants(dialog) if isinstance(w,tk.Canvas));canvas.yview_moveto(1);root.update()
+            assert canvas.yview()[0]>0,'Long document details cannot be scrolled'
+            capture('document-review-scrolled',dialog);dialog.destroy();root.update()
+            result['import_document_checks']=['background_import','exact_duplicate_skipped','original_preserved','unconfirmed_document','short_window_confirmation','scrollable_document_details']
             result['photo_densities']=densities
             assert not errors,'Interface callback failed: '+str(errors)
             result.update(status='PASS',pages=titles,width=root.winfo_width(),height=root.winfo_height())
