@@ -11,6 +11,7 @@ from review_assist import decode_embedding
 
 
 def card_candidates(case,include_hidden=False):
+    from card_regions import VERSION as CARD_DETECTOR_VERSION
     candidates=[]
     for position,record in enumerate(case.get('imported_files',[])):
         path=record['path'];row=case.get('local_photo_results',{}).get(path,{})
@@ -21,7 +22,7 @@ def card_candidates(case,include_hidden=False):
         if review.get('sha256')!=row.get('sha256'):review={}
         signal=bool(values and values['load_board']>.26 and values['load_board']>values['property']+.035)
         if signal and not review and not entry.get('options') and values['receipt']>values['load_board'] and likely_receipt(values,path):continue
-        if not signal and not entry.get('options') and not entry.get('stage_reading',{}).get('stage') and not review and not (row.get('card_detector_version')==1 and (row.get('card_detected') or row.get('card_regions'))):continue
+        if not signal and not entry.get('options') and not entry.get('stage_reading',{}).get('stage') and not review and not (row.get('card_detector_version')==CARD_DETECTOR_VERSION and (row.get('card_detected') or row.get('card_regions'))):continue
         hidden=case.get('load_card_dismissals',{}).get(path,{}).get('sha256')==row.get('sha256')
         if hidden and not include_hidden:continue
         try:

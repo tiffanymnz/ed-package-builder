@@ -1,3 +1,12 @@
+# v54 - More Photo Suggestions and Better Load-Card Reading
+
+- A recalibrated compact category head makes more useful suggestions at the same 0.70 cutoff. The established measurement prior remains available to protect tape evidence. No additional runtime model download is required.
+- Load-card reading adds bounded header, orientation and observed-text-region retries. Yellow strips retain nearby text across folds or glare. Original image bytes remain unchanged.
+- Literal high-confidence LOAD #N readings can supply a review clue. Fused digit readings, conflicting numbers and incomplete output cannot establish a trip. Container similarity still never assigns physical loads.
+- Current-version unread card candidates remain visible for review. Existing suggestions are invalidated by version changes.
+- 459 local source/desktop tests passed without skips. Matching Windows executable checks are required before distributing this version.
+- Checked sample results and their limits appear in RELEASE_VALIDATION.md.
+
 # v53 - Supplied-Data Acceptance and Card Review Fixes
 
 - Yellow paper cards use the same geometry and ink checks as neutral cards; blank yellow areas do not establish cards or loads.

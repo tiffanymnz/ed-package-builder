@@ -12,10 +12,8 @@ Build an Excessive Debris package from vendor photos, bids, invoice and RBB docu
 
 Read START_HERE.md for the workflow.
 
-**Current source: v53 acceptance update.** All 449 local source and desktop tests passed without skips. The v52 baseline passed 445 Windows tests and frozen application checks. Match any distributed executable to its successful Windows workflow and included validation record.
+**Current source: v54 photo coverage and card-reading update.** All 459 local source and desktop tests passed without skips. Match a distributed executable to its successful Windows workflow and included validation record.
 
-All 14 supplied ZIP submissions passed import, duplicate-handling, decoded-image and source-hash checks: 6,776 unique file imports within their submissions. Four reference-directed packages again preserved 309 selected source images and 13 financial pages.
+On 88 scored photos excluded from the v54 category-head fit, correct suggestions increased from 41 to 64 and withheld suggestions fell from 46 to 23; one suggestion remained wrong. On ten positive card examples, correct load numbers increased from three to seven, with three withheld and none wrong. The gain came from development card examples; the separate three-card check did not improve. Seven negative controls produced no false load or stage claim.
 
-The final broad-category check scored 294 of 303 visually labeled photos across 14 submissions: 147 correct suggestions, 3 incorrect suggestions and 144 withheld. Of 150 suggestions, 98% matched the checked references; coverage was 51%. A separate seven-positive real-card check returned two correct load numbers and withheld five, with no wrong load numbers. Three of four positive card-stage references were read correctly; one was withheld. Suggestions need review, and appearance alone never establishes a trip.
-
-These are supplied-data acceptance results, including development checks, not a universal or untouched-property accuracy claim. The work-laptop trial is the user's next planned step after software checks. The only deferred policy decision is the exact $2,500 boundary and gross/net basis. See RELEASE_VALIDATION.md.
+These results describe the supplied samples, not universal accuracy. Container recognition and physical-trip assignment remain separate: similar containers can be grouped for review, but distinct trips require checked evidence. Unresolved trip assignments remain unresolved. See RELEASE_VALIDATION.md for scope and remaining review work. The planned work-laptop trial will measure actual staff efficiency.

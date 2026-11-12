@@ -8,7 +8,7 @@ from calculator_evidence import file_digest
 from load_text_runtime import MODEL_DIGEST,RUNTIME
 from small_vision_runtime import SetupCancelled
 
-VERSION=8
+VERSION=9
 LABEL=re.compile(r'^\s*load\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 FOCUSED_LABEL=re.compile(r'^\s*l[oa]{2}d\s*[#*:＋+«]?\s*(\d{1,3})(?![\d./])\s*[.,]?\s*$',re.I)
 
@@ -84,18 +84,64 @@ def read_load_card(path,base_text,cancel,runtime=None):
  def read_view(image,view,max_tokens=224):
   nonlocal incomplete
   result=runtime.read(image,'regions',cancel,max_tokens=max_tokens)
-  if result.get('truncated'):
-   incomplete=True;readings.append(dict(engine='florence',view=view,loads=[],text=result.get('text','')[:1500],incomplete=True));return
+  truncated=bool(result.get('truncated'))
+  if truncated:incomplete=True
   found=regions(result['text']);text='\n'.join(r['text'] for r in found)
-  numbers=sorted(set(text_numbers(text))|{n for r in found for n in text_numbers(r['text'])})
+  numbers=[] if truncated else sorted(set(text_numbers(text))|{n for r in found for n in text_numbers(r['text'])})
   if classify_document(text) in ('invoice','bid','estimate','work_order','hpir'):numbers=[]
-  readings.append(dict(engine='florence',view=view,loads=numbers,text=text[:1500]))
+  readings.append(dict(engine='florence',view=view,loads=numbers,text=text[:1500],incomplete=truncated))
+  # OCR coordinates locate visible ink; misspelled labels are never repaired
+  # into numbers by string substitution. Independent pixel reads supply clues.
+  root=getattr(runtime,'root',None)
+  if root is not None and not numbers:
+   from handwriting_reader import reader_for
+   from card_reading_views import text_region_view,explicit_hash_load
+   compact=reader_for(root)
+   if compact.ready():
+    if isinstance(image,Image.Image):source=image
+    else:
+     with Image.open(image) as original:source=ImageOps.exif_transpose(original).convert('RGB')
+    candidates=[];groups=[]
+    for j,region in enumerate(found):
+     if re.fullmatch(r'l[a-z .#*()\d]{1,22}',region['text'].strip(),re.I) and region.get('coords'):
+      candidates.append(j)
+      if j+1<len(found) and re.fullmatch(r'\d{1,3}',found[j+1]['text'].strip()) and found[j+1].get('coords'):
+       a=region['coords'];b=found[j+1]['coords'];gap=min(b[1::2])-max(a[1::2]);height=max(a[1::2])-min(a[1::2])
+       if -height*.2<=gap<=height*2:candidates.append(j+1);groups.append((j,j+1))
+    focused=[];pair_options=[];marked_options=[]
+    for j in sorted(set(candidates))[:4]:
+     crop=text_region_view(source,found[j]['coords'])
+     if crop is None:continue
+     clue=compact.read(crop)
+     if clue and clue['score']>=.70:
+      focused.append(clue['text']);marked=explicit_hash_load(clue['text'],clue['score'])
+      if marked is not None:marked_options.append(marked)
+      if text_numbers(clue['text']):
+       check=runtime.read(crop,'text',cancel,max_tokens=40)
+       checked=[] if check.get('truncated') else text_numbers(check.get('text',''));pair_options.extend(checked)
+       readings.append(dict(engine='florence',view=view+'-focused-check',loads=checked,text=check.get('text','')[:300],incomplete=bool(check.get('truncated'))))
+    if focused:
+     precise='\n'.join(focused)
+     readings.append(dict(engine='compact_handwriting',view=view+'-focused',loads=text_numbers(precise) if pair_options else sorted(set(marked_options)),text=precise[:500]))
+    for a,b in groups[:2]:
+     coords=found[a]['coords']+found[b]['coords'];xs=coords[0::2];ys=coords[1::2];left,right=min(xs),max(xs);top,bottom=min(ys),max(ys)
+     crop=text_region_view(source,[left,top,right,top,right,bottom,left,bottom])
+     if crop is None:continue
+     checked=runtime.read(crop,'text',cancel,max_tokens=40)
+     readings.append(dict(engine='florence',view=view+'-stacked-label',loads=[] if checked.get('truncated') else text_numbers(checked.get('text','')),text=checked.get('text','')[:300],incomplete=bool(checked.get('truncated'))))
  for i,crop in enumerate(card_crops(path,detected)):
   if cancel.is_set():raise SetupCancelled()
   with tempfile.TemporaryDirectory(prefix='ed-load-card-') as folder:
    target=Path(folder)/'card.png';crop.save(target);classic,_=read_image(target,page_mode=6)
   readings.append(dict(engine='standard',view=f'card-{i}',loads=text_numbers(classic),text=classic[:1500]))
   read_view(crop,f'card-{i}')
+  from card_reading_views import header_views,retry_has_signal
+  original_text='\n'.join(r.get('text','') for r in readings if r.get('view')==f'card-{i}')
+  if not any(r.get('loads') for r in readings if r.get('view','').startswith(f'card-{i}')) and retry_has_signal(crop,original_text):
+   for suffix,retry in header_views(crop):
+    if cancel.is_set():raise SetupCancelled()
+    read_view(retry,f'card-{i}-'+suffix,max_tokens=96)
+    if any(r.get('loads') for r in readings if r.get('view','').startswith(f'card-{i}')):break
 
  if panel:
   with Image.open(path) as original:

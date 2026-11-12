@@ -1,3 +1,33 @@
+# v54 - Photo Coverage and Load-Card Validation
+
+November 12, 2026. Supplied-data developer validation; no new vendor files are required for this pass.
+
+## Measured changes
+
+| Check | v53 | v54 |
+|---|---:|---:|
+| Correct broad-category suggestions, 88 scored photos | 41 | 64 |
+| Wrong broad-category suggestions | 1 | 1 |
+| Withheld broad-category suggestions | 46 | 23 |
+| Correct load numbers, 10 positive examples | 3 | 7 |
+| Wrong load numbers | 0 | 0 |
+| Withheld load numbers | 7 | 3 |
+| Negative controls with a false load or stage, 7 examples | 0 | 0 |
+
+The 90-photo category selection spans nine supplied submissions. Two ambiguous references are excluded. All 90 were excluded from the 213-example v54 head fit; references were frozen before evaluation. They come from the existing property corpus, not untouched new properties or an independent third-party audit. Suggestion coverage rose from 42/88 (47.7%) to 65/88 (73.9%); precision among suggestions rose from 41/42 (97.6%) to 64/65 (98.5%). One receipt photographed against a property background remains misclassified. Withheld photos remain review work.
+
+The card replay combines seven development positives and three separate positives. Development results improved from two to six correct numbers; the separate three returned one correct and two withheld in both versions. Thus the combined improvement is real on these examples but does not establish improved generalization to new handwriting. Positive stage results remain three correct and four withheld; no stage-recall improvement is claimed. All seven negative controls remained clear. Reading proposes review clues only: appearance does not identify physical trips, and conflicts remain unresolved.
+
+## Software and package checks
+
+459 local source/desktop tests passed without skips. New regressions cover retry geometry and pixel bounds, unchanged originals, literal hash markers, conflicting readings, invalid vectors, measurement-prior retention, unresolved reused-container evidence and current-version unread cards. The original four reference packages were regenerated: all 309 selected images and 13 financial pages retained their source content. Existing missing evidence and invoice conflicts remain visible rather than being marked complete.
+
+A matching Windows workflow must pass source tests, bundled offline photo/card/annotation checks, navigation at multiple photo counts and executable DOCX/PDF export before distributing the portable archive. The delivered validation record identifies its exact source and artifact hashes.
+
+The work-laptop trial remains necessary to measure company-device compatibility, staff review effort and actual elapsed time. No staff time-saving percentage is claimed. This change does not alter financial policy rules.
+
+## Historical validation
+
 # v53 - Supplied-Data Acceptance
 
 November 9, 2026. The user accepts the supplied corpus as the practical accuracy-test scope. No additional photo submission is required to finish this developer test pass. This does not convert development cases into untouched-property evidence.
