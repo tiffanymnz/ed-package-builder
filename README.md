@@ -12,7 +12,7 @@ Build an Excessive Debris package from vendor photos, bids, invoice and RBB docu
 
 Read START_HERE.md for the workflow.
 
-**Current source: v55 stage-reading and card-inspection refinement.** Adds bounded Full/Empty word reads with a nearby-fraction safeguard and a Card Detail control in load-card review. All 464 local source/desktop tests passed without skips; match the distributed executable to its successful Windows run and delivery validation record.
+**Current source: v56 card-review and recovery fixes.** Incoming card readings update the open form while preserving your edits. The pending queue excludes confirmed cards, suggested stages require an explicit choice, and failed reading batches can be retried without repeating successful work. Cancelled case dialogs resume background work. All 476 local source/desktop tests passed; the distributed executable must match a successful Windows run and its delivery validation record.
 
 The broad classifier is unchanged. Reinspection corrected one mislabeled exterior photo in the 90-photo v54 selection: the corrected result is 65 correct suggestions and 23 withheld across 88 scored photos. This is a reference correction, not a new sorting gain. Additional crop, angle, tape-focus and detector experiments were rejected when they added mistakes, processing cost or unrelated review work.
 

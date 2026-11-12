@@ -1,3 +1,21 @@
+# v56 - Card Review and Recovery Validation
+
+November 12, 2026. This update addresses verified workflow defects; recognition models, thresholds and financial rules are unchanged.
+
+## Checks completed locally
+
+All 476 source/desktop tests passed in 67.029 seconds without skips. Twelve new regression tests cover arriving readings, preservation of edited fields, changed/missing sources, queue completion and reopening reviewed cards, reader cancellation, selective retry, cancelled case dialogs and failed-open recovery. Actual Tk windows are exercised for the interface cases.
+
+The source interface smoke passed all four workflow pages at a 1000 × 740 window and 6/12/24-photo layouts. It also checked live suggestions, preservation of manual values, explicit stage choice, completion of the pending queue, reopening a reviewed card and unchanged original bytes. Synthetic cache injections test UI behavior; they do not establish recognition accuracy. Native offline inference is a separate Windows release gate.
+
+## Delivery gate
+
+The matching Windows build must pass the complete source suite, frozen offline photo engine, frozen card-reader inference, frozen interface/card review and executable DOCX/PDF export. The delivery report records its exact source tree, run and artifact hashes. Do not distribute a source-only check as a verified executable.
+
+Prior supplied-data recognition and reference-package results below remain the applicable evidence; no new accuracy result is claimed for v56. The company work-laptop trial still measures device compatibility, first-time usability, review effort and elapsed time. Similar containers never establish a physical trip; unresolved trip evidence stays unresolved.
+
+## Historical validation
+
 # v55 - Final Recognition Refinement
 
 November 12, 2026. Same supplied corpus; no new vendor submission is needed for this developer pass.

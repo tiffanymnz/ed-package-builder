@@ -28,7 +28,9 @@ def card_candidates(case,include_hidden=False):
         try:
             if file_digest(path)!=row['sha256']:continue
         except OSError:continue
-        candidates.append(dict(record,card_regions=entry.get('card_regions') or (row.get('card_regions',[]) if row.get('card_detector_version')==CARD_DETECTOR_VERSION else []),hidden=hidden,position=position,sha256=row['sha256'],options=entry.get('options',[]),reviewed_vendor=review.get('vendor_load') if review.get('confirmed') else None,reviewed_load=review.get('load') if review.get('confirmed') and review.get('sha256')==row['sha256'] else None,rank=values.get('load_board',0)+(1 if entry.get('options') else 0)))
+        stage_reading=entry.get('stage_reading',{})
+        stage=stage_reading.get('stage') if stage_reading.get('status') in ('single_reader','corroborated') and len(stage_reading.get('options',[]))==1 else None
+        candidates.append(dict(record,stage_suggestion=stage,stage_status=stage_reading.get('status'),card_regions=entry.get('card_regions') or (row.get('card_regions',[]) if row.get('card_detector_version')==CARD_DETECTOR_VERSION else []),hidden=hidden,position=position,sha256=row['sha256'],options=entry.get('options',[]),reviewed_vendor=review.get('vendor_load') if review.get('confirmed') else None,reviewed_load=review.get('load') if review.get('confirmed') and review.get('sha256')==row['sha256'] else None,rank=values.get('load_board',0)+(1 if entry.get('options') else 0)))
     return sorted(candidates,key=lambda r:(-r['rank'],r['position']))
 
 

@@ -121,7 +121,7 @@ class PackageApp(GuidedApp):
         cache=self.case_dir/'local_photo_sorting.json'
         if cache.is_file():self.case['local_photo_results']=json.loads(cache.read_text(encoding='utf-8'))
         path=filedialog.asksaveasfilename(title='Save Project to Resume Later',defaultextension='.edcase',initialfile=self._project_file.name if self._project_file else safe(self.case['case_number'])+'.edcase',initialdir=str(self._project_file.parent) if self._project_file else str(Path.home()),filetypes=[('ED Project','*.edcase')])
-        if not path:return False
+        if not path:self.start_photo_work();return False
         try:
             self.status.set('Saving project... Large photo sets may take a moment.');self.root.update_idletasks()
             from background_task import run_file_task
@@ -167,8 +167,8 @@ class PackageApp(GuidedApp):
         import tempfile
         from portable_project import import_project,fingerprint
         path=filedialog.askopenfilename(title='Open Project',filetypes=[('ED Project','*.edcase'),('Older Case','case.json')])
-        if not path:return
-        if not self.prepare_leave():return
+        if not path:self.start_photo_work();return
+        if not self.prepare_leave():self.start_photo_work();return
         owner=None
         try:
             self.status.set('Opening project...');self.root.update_idletasks()
@@ -189,6 +189,7 @@ class PackageApp(GuidedApp):
         except Exception as exc:
             if owner:owner.cleanup()
             messagebox.showerror('Cannot Open Project',str(exc))
+        finally:self.start_photo_work()
 
     def close_app(self):
         if getattr(self,'_file_task_running',False):return
@@ -211,6 +212,11 @@ class PackageApp(GuidedApp):
         for label,key in [('Case Number','case_number'),('Vendor','vendor')]:
             row=ttk.Frame(body);row.pack(fill='x',pady=8);ttk.Label(row,text=label,width=15).pack(side='left')
             var=tk.StringVar();values[key]=var;ttk.Entry(row,textvariable=var).pack(side='left',fill='x',expand=True)
+        previous_case=self.case
+        def cancel():
+            win.destroy()
+            if self.case is previous_case:self.start_photo_work()
+        win.protocol('WM_DELETE_WINDOW',cancel);win.bind('<Escape>',lambda event:cancel())
         def create():
             case=values['case_number'].get().strip();vendor=values['vendor'].get().strip()
             if not case or not vendor: messagebox.showwarning('Required Details','Enter the case number and vendor.',parent=win);return
@@ -220,7 +226,9 @@ class PackageApp(GuidedApp):
             self._project_file=None;self._saved_project_fingerprint=None
             self.case=make_case(case,'',vendor,1,'');self.case['verified_first_10_amount']=''
             self.case_dir=directory;self.vars={};self.save();self.refresh();self.go(0);win.destroy()
-        ttk.Button(body,text='Create Case',style='Primary.TButton',command=create).pack(anchor='e',pady=22)
+        actions=ttk.Frame(body);actions.pack(fill='x',pady=22)
+        ttk.Button(actions,text='Cancel',command=cancel).pack(side='left')
+        ttk.Button(actions,text='Create Case',style='Primary.TButton',command=create).pack(side='right')
 
     def draw_case(self):
         if not self.case:self.empty(self.case_tab);return

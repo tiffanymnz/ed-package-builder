@@ -19,3 +19,7 @@
 **Hidden a card?** Review Load Cards > Show Hidden Cards lets you inspect and restore it.
 
 **Load-card close-up:** In Review Load Cards, choose Card Detail to cycle the detected areas without manually hunting across the photo. Choose Fit to see the entire photo again. These areas are navigation aids; check the visible number and stage before confirming.
+
+**Card review that stays current:** Incoming readings appear while you review a card and preserve fields you have edited. A possible stage is a suggestion: inspect the photo, choose Use Suggested Stage if it is correct, select the actual package load and confirm. A vendor's printed load number does not assign your package load automatically.
+
+**Finished or interrupted card review:** Confirmed cards leave the pending list; Show Reviewed Cards lets you edit them later. If reading pauses with an error, Retry Card Reading retries failed and remaining cards. Cancelling a case dialog resumes the current case's background processing.

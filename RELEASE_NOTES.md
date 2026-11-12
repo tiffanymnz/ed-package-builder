@@ -1,3 +1,12 @@
+# v56 - Smoother Card Review and Reliable Recovery
+
+- Incoming source-checked card readings update the open form without recreating its preview or overwriting manually edited fields. Possible stages are visible; Use Suggested Stage requires an explicit choice before confirmation. Suggested numbers never assign a physical trip automatically.
+- Confirmed cards leave the pending queue. Show Reviewed Cards reopens saved decisions, and the completed queue shows a clear next step.
+- Retry Card Reading recovers failed and unstarted cards while retaining successful readings. Reader cancellation is handled correctly, and missing/changed photos show a readable warning instead of crashing.
+- Cancelling Save Project, Open Project or New Case resumes the current case's background work. A failed project open preserves the current case and resumes processing.
+- 476 local source/desktop tests passed. Source interface smoke passed navigation, 6/12/24-photo layouts and six card-review checks. The Windows EXE must pass the same new card workflow before delivery.
+- Recognition models, thresholds and financial rules are unchanged; this release makes existing suggestions and recovery more usable. No new recognition-accuracy gain or staff time-saving percentage is claimed.
+
 # v55 - Stronger Stage Clues and Faster Card Inspection
 
 - A bounded compact-reader pass recovers isolated Full/Empty words after a load clue exists. Limited OCR typography such as fu!l is accepted only as a single-reader stage suggestion after two source-pixel reads agree. Nearby fraction ink vetoes the isolated-word interpretation. This never repairs load numbers, assigns trips or fills templates.

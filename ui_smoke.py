@@ -52,6 +52,35 @@ def run(report_path):
             assert window.apply_button.winfo_rooty()+window.apply_button.winfo_height()<=bottom-4,'Photo review action is obscured by the taskbar'
             assert window.apply_button.winfo_rootx()+window.apply_button.winfo_width()<=right,'Photo review action extends beyond the monitor'
             window.close();root.update()
+            # Exercise the real card-review queue and live result refresh in
+            # the packaged interface, using only synthetic sources and clues.
+            from calculator_evidence import file_digest
+            from local_photo_sorter import VERSION as PHOTO_VERSION,MODEL_DIGEST as PHOTO_MODEL
+            from card_regions import VERSION as DETECTOR_VERSION
+            from load_identity import VERSION as READER_VERSION
+            from load_text_runtime import MODEL_DIGEST as READER_MODEL
+            from load_card_review import CardReviewWindow
+            path=app.case['imported_files'][0]['path'];sha=file_digest(path)
+            app.case.setdefault('local_photo_results',{})[path]=dict(sha256=sha,prompt_version=PHOTO_VERSION,model_digest=PHOTO_MODEL,card_detector_version=DETECTOR_VERSION,card_detected=True,card_regions=[dict(box=[.2,.2,.7,.7])])
+            cards=CardReviewWindow(app);root.update();preview=cards.preview
+            assert cards.selected() and cards.number.get()=='','Card review needs an explicit package load'
+            app.case.setdefault('load_identity_cache',{})[path]=dict(sha256=sha,version=READER_VERSION,model_digest=READER_MODEL,status='single_reader',options=[2],stage_reading=dict(stage='full',options=['full'],status='single_reader'))
+            cards.refresh(preserve=True);root.update()
+            assert cards.preview is preview and cards.vendor_number.get()=='2','Arriving card reading was not shown'
+            assert cards.stage.get()=='Not Clear / Not Shown' and 'Possible Stage: Full' in cards.status.cget('text'),'Stage suggestion must be visible and unconfirmed'
+            cards.use_suggested_stage();cards.number.set('1');cards.vendor_number.set('9')
+            app.case['load_identity_cache'][path]['options']=[3];cards.refresh(preserve=True);root.update()
+            assert cards.vendor_number.get()=='9' and cards.number.get()=='1' and cards.stage.get()=='Full','Live update overwrote a manual choice'
+            assert cards.confirm_button.winfo_rooty()+cards.confirm_button.winfo_height()<=bottom-4,'Card confirmation is hidden by the taskbar'
+            capture('cards-live-suggestion',cards.win)
+            cards.confirm();root.update()
+            assert cards.selected() is None and 'disabled' in cards.confirm_button.state(),'Completed card returned to the pending queue'
+            assert 'All available cards are reviewed' in cards.status.cget('text'),'Card completion state is missing'
+            cards.show_reviewed.set(True);cards.refresh();root.update()
+            assert cards.vendor_number.get()=='9' and cards.stage.get()=='Full','Reviewed card cannot be reopened'
+            assert file_digest(path)==sha,'Card review altered the original photo'
+            capture('cards-reviewed',cards.win);cards.close();root.update()
+            result['card_review_checks']=['live_suggestions','manual_values_preserved','explicit_stage_choice','completed_queue','reopen_reviewed_card','original_unchanged']
             result['photo_densities']=densities
             assert not errors,'Interface callback failed: '+str(errors)
             result.update(status='PASS',pages=titles,width=root.winfo_width(),height=root.winfo_height())

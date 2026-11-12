@@ -11,7 +11,7 @@ from PIL import Image,ImageOps,ImageTk
 from calculator_evidence import file_digest
 from review_assist import checked_rows,category_matches,confirm_load_membership,decode_embedding
 from visual_photo_review import timing_clues,current_stage,apply_visual_stage,STAGES,PHASE
-from local_photo_sorter import MODEL_DIGEST,MODEL_ID,VERSION,RUNTIME,batch
+from local_photo_sorter import MODEL_DIGEST,MODEL_ID,VERSION,RUNTIME,batch,SetupCancelled
 
 IMAGE_EXT={'.jpg','.jpeg','.png','.webp','.bmp','.tif','.tiff'}
 CATEGORIES={'all':'All Photos','unreviewed':'Not Organized','measurement':'Measurements','container_photos':'Containers & Loads','property_photos':'Property & Debris','stage:during':'During Suggestions','stage:before':'Before Suggestions','stage:after':'After Suggestions','documents':'Documents & Receipts','other':'Other / Unclear'}
@@ -134,6 +134,7 @@ class BackgroundPhotoWork:
             elif kind=='load_result':
                 path,entry=value;self.case.setdefault('load_identity_cache',{})[path]=entry;self.changed=True;self.app.save()
             elif kind=='load_status':self.status=value;self.changed=True
+            elif kind=='load_retryable':self.load_attempted.difference_update(value)
         self.notify()
         if not self.cancel.is_set() and not self.app.scan_running:
             todo=[]
@@ -184,7 +185,7 @@ class BackgroundPhotoWork:
             from load_identity import card_candidate,read_load_card
             from load_text_runtime import RUNTIME as reader
             try:
-                for path,sha,text in todo:
+                for position,(path,sha,text) in enumerate(todo):
                     if self.cancel.is_set():break
                     try:
                         if file_digest(path)!=sha:continue
@@ -197,9 +198,24 @@ class BackgroundPhotoWork:
                         result=read_load_card(path,text,self.cancel,reader);self.events.put(('load_result',(path,result)))
                     except SetupCancelled:break
                     except Exception as exc:
-                        self.load_failure=True;self.events.put(('load_status','Load-card reading paused. Other photo review remains available. '+str(exc)[:120]));break
+                        self.load_failure=True
+                        self.events.put(('load_retryable',[(p,d,hashlib.sha256(t.encode()).hexdigest()) for p,d,t in todo[position:]]))
+                        self.events.put(('load_status','Load-card reading paused. Other photo review remains available. '+str(exc)[:120]));break
             finally:self.reader_running=False
         threading.Thread(target=work,daemon=True).start()
+    def retry_reading(self):
+        if self.closed or self.app.case is not self.case or self.reader_running or self.cancel.is_set() or not self.load_failure:return False
+        # Apply queued retry keys before scheduling again; successful earlier
+        # cards keep their completed attempts and source-bound results.
+        retained=[]
+        while not self.events.empty():
+            kind,value=self.events.get()
+            if kind=='load_retryable':self.load_attempted.difference_update(value)
+            elif kind!='load_status':retained.append((kind,value))
+        for event in retained:self.events.put(event)
+        self.load_failure=False;self.status='Retrying Load-Card Reading...';self.changed=True
+        return True
+
     def text_done(self):
         if not self.closed and self.app.case is self.case:self.changed=True
     def close(self):
@@ -217,7 +233,7 @@ class PhotoFlowWindow:
         body=ttk.Frame(self.win,padding=18);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Organize Photos',font=(app.ui_font,22,'bold')).pack(anchor='w')
         ttk.Label(body,text='Choose a photo group or filter, then select photos to assign. The same container can appear in several loads.',wraplength=1000).pack(anchor='w',pady=(5,12))
-        self.status=ttk.Label(body,text='Preparing photos...',style='Muted.TLabel');self.status.pack(anchor='w',pady=(0,10))
+        self.status=ttk.Label(body,text='Preparing photos...',style='Muted.TLabel',wraplength=1000);self.status.pack(fill='x',pady=(0,10));self.status.bind('<Configure>',lambda e:self.status.configure(wraplength=max(240,e.width)))
         footer=ttk.Frame(body);footer.pack(side='bottom',fill='x',pady=(12,0))
         self.selection=ttk.Label(footer,text='0 Selected');self.selection.pack(side='left')
         self.target=tk.StringVar(value='Choose a Load or Stage');self.target_box=ttk.Combobox(footer,textvariable=self.target,state='readonly',width=22);self.target_box.pack(side='left',padx=8)
@@ -347,7 +363,7 @@ class PhotoFlowWindow:
                 self.rows,self.checked=result;self.update_choices();self.selected.intersection_update({r['path'] for r in self.rows})
                 if not service or not (service.running or self.app.scan_running):
                     group_count=len({r.get('proposal',{}).get('group_label') for r in self.rows if r.get('proposal',{}).get('group_label')})
-                    self.status.configure(text=f'{len(self.rows)} Photos Ready'+(f' · {group_count} Photo Groups Found' if group_count else ' to Review'))
+                    self.status.configure(text=service.status+' Open Review Load Cards to retry.' if service and service.load_failure else f'{len(self.rows)} Photos Ready'+(f' · {group_count} Photo Groups Found' if group_count else ' to Review'))
                 if not self.selected:self.render()
         self.job=self.win.after(250,self.poll)
     def filtered(self):
