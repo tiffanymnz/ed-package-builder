@@ -13,10 +13,14 @@ def fixture(folder):
                 invoice_deduction_status='yes',invoice_deduction_usd='350',invoice_amount_usd='1049.65',
                 invoice_quantity_cyd='39.99',financial_confirmation_hash='synthetic-confirmation',bid_review_confirmed=True)
     image=folder/'synthetic.png';Image.new('RGB',(400,300),'#a6c9d9').save(image)
-    for load in case['loads']:
+    for load_number,load in enumerate(case['loads'],1):
         load.update(length_ft=12,width_ft=6,side_height_ft=5,fill_fraction='1',measurements_confirmed=True,
                     container_name='Synthetic Container',photos={key:str(image) for key in ('height','width','length','empty','quarter','half','three_quarters','full_1','full_2','receipt')},
                     disposal_photo=str(image),evidence_first_10_cyd=str(image),extra_measurement_photos=[str(image)]*3)
+        for stage_number,slot in enumerate(('empty','quarter','half','three_quarters','full_1','full_2')):
+            view=folder/f'load-{load_number}-{slot}.png'
+            Image.new('RGB',(80,60),(load_number*50,stage_number*35,90)).save(view)
+            load['photos'][slot]=str(view)
         load['calculator_evidence']=dict(path=str(image),source_url=URL,user_confirmed=True,sha256=file_digest(image),measurement_signature=measurement_signature(load))
     for key in ('before_photos','during_photos','after_photos'):case[key]=[str(image)]
     documents=[]

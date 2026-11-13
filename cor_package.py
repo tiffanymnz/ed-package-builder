@@ -29,14 +29,28 @@ def number(value):
 def rounded(value): return number(value).quantize(CENT, rounding=ROUND_HALF_UP)
 def cash(value): return f'${rounded(value):,.2f}'
 
+def document_source_signatures(case,roles=None):
+    from calculator_evidence import file_digest
+    result=[]
+    for item in case.get('package_documents',[]):
+        if item.get('role') in ('exclude','approval') or (roles is not None and item.get('role') not in roles):continue
+        try:digest=file_digest(item.get('path',''))
+        except (OSError,ValueError):digest='missing'
+        result.append(dict(role=item.get('role'),pages=item.get('pages',''),sha256=digest))
+    return result
+
+
 def bid_fingerprint(case):
     import hashlib
     def numeric_value(raw):
         try:return str(number(raw).normalize())
         except ValueError:return str(raw or '')
     value={key:case.get(key) for key in ('package_documents','vendor')}
+    value['document_sources']=document_source_signatures(case)
     value['rate_per_cyd']=numeric_value(case.get('rate_per_cyd'))
     value['loads']=[{key:numeric_value(load.get(key,1 if key=='fill_fraction' else 0)) for key in ('length_ft','width_ft','side_height_ft','overage_height_ft','overage_cyd','fill_fraction')} for load in case.get('loads',[])]
+    methods=[load.get('quantity_rounding','full_precision') for load in case.get('loads',[])]
+    if any(method!='full_precision' for method in methods):value['quantity_rounding']=methods
     return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
 
 def financial_fingerprint(case):
@@ -47,9 +61,12 @@ def financial_fingerprint(case):
         try:return str(number(raw).normalize())
         except ValueError:return str(raw or '')
     value={key:stable(case.get(key,'')) for key in keys}
+    value['invoice_sources']=document_source_signatures(case,{'invoice'})
     value['hud_calculation_rule']='first-10-cyd-at-request-rate-v1'
     value['load_dimensions']=[{key:stable(load.get(key,'')) for key in ('length_ft','width_ft','side_height_ft',
         'overage_height_ft','overage_cyd','measured_load_cyd','fill_fraction')} for load in case.get('loads',[])]
+    methods=[load.get('quantity_rounding','full_precision') for load in case.get('loads',[])]
+    if any(method!='full_precision' for method in methods):value['quantity_rounding']=methods
     return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
 
 def totals(case):
@@ -64,6 +81,8 @@ def totals(case):
 def description(case):
     if case.get('financial_confirmation_hash')!=financial_fingerprint(case):
         raise ValueError('Confirm the invoice and current rate-based HUD deduction first.')
+    invoice_issues=financial_issues(case)
+    if invoice_issues:raise ValueError('\n'.join(invoice_issues))
     bid_issues=bid_requirements(case)
     if bid_issues:raise ValueError('\n'.join(bid_issues))
     value = totals(case)
@@ -170,10 +189,12 @@ def document_suggestions(record):
     suggestions=[dict(path=str(path), name=record.get('name',path.name), role=g['role'],
                  pages=f"{g['start']}-{g['end']}", confirmed=False, amount='', vendor='') for g in groups]
     if path.suffix.lower()=='.pdf':
+        from calculator_evidence import file_digest
+        suggested_sha=record.get('sha256') or file_digest(path)
         with fitz.open(path) as doc:
             for item,group in zip(suggestions,groups):
                 values=extract_costs('\n'.join(doc[i].get_text() for i in range(group['start']-1,group['end'])))
-                item['cost_suggestions']=values
+                item['cost_suggestions']=values;item['cost_suggestions_sha256']=suggested_sha
                 if item['role']=='bid':item['amount']=values.get('invoice_amount_usd','')
     return suggestions
 
@@ -186,7 +207,7 @@ def apply_document_text_suggestions(case):
         try:
             if cached['sha256']!=file_digest(path):continue
         except OSError:continue
-        values=extract_costs(cached['text']);document['cost_suggestions']=values
+        values=extract_costs(cached['text']);document['cost_suggestions']=values;document['cost_suggestions_sha256']=cached['sha256']
         if document.get('confirmed'):continue
         role=classify_document(cached['text'])
         if document.get('role')=='other' and role!='other':document['role']=role
@@ -314,22 +335,42 @@ def apply_photo_suggestions(case, selected):
             case.pop('bid_confirmation_hash',None);case.pop('financial_confirmation_hash',None)
     return len(touched)
 
+def comparable_bid_amount(record,quantity):
+    amount=number(record.get('amount'))
+    if record.get('pricing_basis')!='per_cyd':
+        quoted=record.get('debris_quantity_cyd')
+        if quoted not in ('',None) and abs(number(quoted)-number(quantity))>Decimal('.02'):
+            raise ValueError('Bid quantity differs from the measured quantity. Confirm an updated bid or the price per CYD shown on the bid.')
+        return amount
+    rate=number(record.get('unit_rate_per_cyd'))
+    quoted=number(record.get('debris_quantity_cyd'))
+    if rate<=0 or quoted<=0 or abs(rounded(rate*quoted)-amount)>Decimal('.01'):
+        raise ValueError('The bid total does not match its confirmed quantity and price per CYD.')
+    return rounded(rate*number(quantity))
+
+
 def validate(case):
-    problems = []
+    from evidence_audit import loading_photo_conflicts,reviewed_source_conflicts
+    from invoice_review import issues as invoice_issues
+    problems = [finding['detail'] for finding in loading_photo_conflicts(case)+reviewed_source_conflicts(case)]
+    problems.extend(invoice_issues(case))
     for i, load in enumerate(case.get('loads',[]),1):
         try: volume(load)
         except Exception as exc: problems.append(f'Load {i}: Measurements need review: {exc}.')
         if not load.get('measurements_confirmed'): problems.append(f'Load {i}: Confirm the container measurements and final fill.')
         _, calculator_issue = screenshot_status(load)
         if calculator_issue: problems.append(f'Load {i}: {calculator_issue}')
+        from load_requirements import applicable,evidence_conflicts
+        for slot in evidence_conflicts(load):problems.append('Load '+str(i)+': '+slot+' evidence conflicts with the confirmed partial fill. Correct the fill or clear that placement.')
         for key in ('height','width','length','empty','quarter','half','three_quarters','full_1','full_2','receipt'):
+            if not applicable(load,key):continue
             path=load.get('photos',{}).get(key)
             if not path or not Path(path).is_file(): problems.append(f'Load {i}: Add {key.replace("_"," ")} evidence.')
         if not load.get('disposal_photo') or not Path(load['disposal_photo']).is_file(): problems.append(f'Load {i}: Add unloading / disposal evidence.')
         # The package template uses one reviewed photo per dimension. Additional
         # views support verification; their count is not a package requirement.
     if not case.get('loads'): problems.append('Add at least one reviewed load.')
-    elif not case['loads'][0].get('evidence_first_10_cyd'): problems.append('Add the first-10-CYD evidence.')
+    elif not case['loads'][0].get('evidence_first_10_cyd') or not Path(case['loads'][0]['evidence_first_10_cyd']).is_file(): problems.append('Add the first-10-CYD evidence.')
     for phase in ('before_photos','during_photos','after_photos'):
         if not any(Path(p).is_file() for p in case.get(phase,[])): problems.append(f'Add property {phase.replace("_photos","")} photos.')
     if case.get('invoice_quantity_basis') not in ('includes','excludes'): problems.append('Confirm the invoiced quantity basis.')
@@ -344,6 +385,9 @@ def validate(case):
         if not record.get('confirmed'): problems.append(f"Confirm document: {record.get('name','Document')}.")
         path = Path(record.get('path',''))
         if not path.is_file(): problems.append(f'Missing document file: {path.name}.'); continue
+        if record.get('reviewed_sha256'):
+            from calculator_evidence import file_digest
+            if record['reviewed_sha256']!=file_digest(path):problems.append(f'Document changed after review: {path.name}. Open and confirm it again.')
         try:
             if path.suffix.lower() == '.pdf':
                 with fitz.open(path) as d:
@@ -369,7 +413,11 @@ def validate(case):
         if value['rate']<=0:problems.append('Confirm a positive HUD request rate.')
         if value['quantity'] < 10: problems.append('Total debris is below 10 CYD. Resolve whether a COR request applies.')
         if value['gross'] < value['allowance']: problems.append('The requested amount cannot be negative. Review quantity, rate and allowance.')
-        if amounts and value['gross'] > min(amounts)+Decimal('.01'):
+        comparable=[]
+        for bid in bids:
+            try:comparable.append(comparable_bid_amount(bid,value['quantity']))
+            except ValueError as exc:problems.append(str(exc))
+        if comparable and value['gross'] > min(comparable)+Decimal('.01'):
             problems.append('Calculated gross exceeds the lowest entered bid. Reconcile the rate or bid before approval.')
         shown=number(case.get('invoice_deduction_usd'))
         if case.get('invoice_deduction_status')=='yes' and shown!=value['allowance']: problems.append('The invoice deduction differs from 10 CYD at the HUD request rate. Reconcile the invoice.')
@@ -384,6 +432,29 @@ def validate(case):
             if abs(number(case.get('invoice_amount_usd'))-value['request'])>Decimal('.06'):problems.append('The invoice excludes the first 10 CYD, but its total does not reconcile to the excess-debris amount.')
     except Exception: problems.append('Confirm measurements for every load and the final rate.')
     return list(dict.fromkeys(problems))
+
+def financial_issues(case):
+    """Check invoice arithmetic independently of a saved confirmation flag."""
+    problems=[]
+    try:
+        value=totals(case)
+        if value['rate']<=0:problems.append('Confirm a positive HUD request rate.')
+        if case.get('invoice_quantity_basis') not in ('includes','excludes'):problems.append('Confirm the invoiced quantity basis.')
+        if case.get('invoice_deduction_status') not in ('yes','no','alternate'):problems.append('Confirm the deduction shown on the invoice.')
+        shown=number(case.get('invoice_deduction_usd'))
+        if case.get('invoice_deduction_status')=='yes' and shown!=value['allowance']:problems.append('The invoice deduction differs from 10 CYD at the HUD request rate. Reconcile the invoice.')
+        if case.get('invoice_deduction_status')=='no' and shown!=0:problems.append('The invoice deduction conflicts with the selected No answer.')
+        billed=number(case.get('invoice_quantity_cyd'))
+        target=value['quantity'] if case.get('invoice_quantity_basis')=='includes' else value['request_quantity']
+        if abs(billed-target)>Decimal('.02'):problems.append('Invoice cubic yards differ from the photo-supported measured quantity. Reconcile the invoice; do not overwrite the photo measurements.')
+        if case.get('invoice_quantity_basis')=='includes':
+            expected=value['gross']-(shown if case.get('invoice_deduction_status')=='yes' else Decimal('0'))
+            if abs(number(case.get('invoice_amount_usd'))-expected)>Decimal('.06'):problems.append('The net invoice amount does not reconcile to its stated deduction.')
+        elif case.get('invoice_quantity_basis')=='excludes':
+            if abs(number(case.get('invoice_amount_usd'))-value['request'])>Decimal('.06'):problems.append('The invoice excludes the first 10 CYD, but its total does not reconcile to the excess-debris amount.')
+    except (ValueError,KeyError,TypeError):problems.append('Confirm the invoice figures, measured quantity and final rate.')
+    return problems
+
 
 def required_bid_count(case):
     """Apply the confirmed under/over rule where plausible amount bases agree."""
@@ -441,12 +512,34 @@ def new_page(doc, title, subtitle=''):
     if subtitle: page.insert_textbox(fitz.Rect(32,40,580,69), subtitle, fontsize=9, color=(.35,.4,.46))
     return page
 
+def append_pdf_page(destination,source,index):
+    """Copy a source page including its transparency color group.
+
+    MuPDF's page insertion omits /Group. Graft that object with its referenced
+    color resources so imported documents retain their original rendering.
+    """
+    destination.insert_pdf(source,from_page=index,to_page=index,final=0)
+    try:
+        group=fitz.mupdf.pdf_dict_gets(fitz.mupdf.pdf_lookup_page_obj(fitz._as_pdf_document(source),index),'Group')
+        if not fitz.mupdf.pdf_is_null(group):
+            mapping=destination.Graftmaps[source._graft_id]
+            copied=fitz.mupdf.pdf_graft_mapped_object(mapping.this,group)
+            page=fitz.mupdf.pdf_lookup_page_obj(fitz._as_pdf_document(destination),len(destination)-1)
+            fitz.mupdf.pdf_dict_puts(page,'Group',copied)
+    finally:destination.Graftmaps[source._graft_id]=None
+
+
 def insert_picture(page, rectangle, path):
     path = Path(path)
     if path.suffix.lower() == '.pdf':
         with fitz.open(path) as source: page.show_pdf_page(rectangle,source,0)
     else:
         with Image.open(path) as image:
+            if image.format=='JPEG' and image.mode in ('RGB','L') and image.getexif().get(274,1)==1:
+                # Preserve the original compressed photograph without a costly
+                # full-resolution PNG conversion. Rotated sources use the path below.
+                page.insert_image(rectangle,filename=str(path),keep_proportion=True)
+                return
             image = ImageOps.exif_transpose(image).convert('RGB')
             stream = io.BytesIO(); image.save(stream,format='PNG')
             page.insert_image(rectangle,stream=stream.getvalue(),keep_proportion=True)
@@ -477,17 +570,20 @@ def template_load_pages(doc, load, number):
     """Two template tables followed by a readable full-page dump receipt."""
     photos=load.get('photos',{});calculator,_=screenshot_status(load)
     first=doc.new_page(width=612,height=792)
-    first.insert_text((75,63),f'LOAD {number}',fontsize=10)
+    from load_requirements import applicable,stage_label
+    caption=f'LOAD {number}'
+    if load.get('measurements_confirmed') and float(load.get('fill_fraction',1))<1:caption+=' - FINAL FILL '+str(round(float(load['fill_fraction'])*100,2))+'%'
+    first.insert_text((75,63),caption,fontsize=10)
     for index,(label,path) in enumerate([
         ('Cubic Yard Calculation',calculator),('Final Height',photos.get('height')),
         ('Width',photos.get('width')),('Length',photos.get('length')),
-        ('Empty Container',photos.get('empty')),('1/4 Full',photos.get('quarter'))]):
+        ('Empty Container',photos.get('empty')),(stage_label(load,'quarter','1/4 Full'),photos.get('quarter'))]):
         row,col=divmod(index,2)
         template_cell(first,fitz.Rect(72+col*234,72+row*210,306+col*234,282+row*210),label,path)
     second=doc.new_page(width=612,height=792)
     for index,(label,key) in enumerate([('1/2 Full','half'),('3/4 Full','three_quarters'),('Full Container','full_1'),('Full Container','full_2')]):
         row,col=divmod(index,2)
-        template_cell(second,fitz.Rect(72+col*234,72+row*205,306+col*234,277+row*205),label,photos.get(key))
+        template_cell(second,fitz.Rect(72+col*234,72+row*205,306+col*234,277+row*205),stage_label(load,key,label),photos.get(key),note='Not Applicable to This Partial Load' if not applicable(load,key) else None)
     receipt=photos.get('receipt')
     template_cell(second,fitz.Rect(72,482,540,707),'Dump Receipt',note='See Following Page' if receipt and Path(receipt).is_file() else None)
     if receipt and Path(receipt).is_file():
@@ -505,22 +601,50 @@ def property_photo_pages(doc, paths, title):
             if path and Path(path).is_file():insert_picture(page,rectangle,path)
             else:page.insert_textbox(rectangle,'Evidence Not Attached',fontsize=9)
 
-def assemble(case, destination, issues=None):
+def export_sources(case):
+    """Record the exact selected inputs; this audit stays outside the PDF."""
+    from calculator_evidence import file_digest
+    from template_review import SLOTS, assigned_path
+    sources=[]
+    for item in case.get('package_documents',[]):
+        if item.get('role') not in ORDER:continue
+        sources.append(dict(section=ROLES[item['role']],path=item['path'],pages=item.get('pages','')))
+    for n,load in enumerate(case.get('loads',[]),1):
+        for slot,label in SLOTS:
+            path=assigned_path(load,slot)
+            if path:sources.append(dict(section=f'Load {n}',slot=slot,label=label,path=path))
+        if load.get('include_supporting_measurements'):
+            sources.extend(dict(section=f'Load {n}',slot='supporting_measurement',path=p) for p in load.get('extra_measurement_photos',[]) if p)
+    for key in ('before_photos','during_photos','after_photos'):
+        sources.extend(dict(section=key,path=p) for p in case.get(key,[]))
+    for source in sources:source['sha256']=file_digest(source['path'])
+    return sources
+
+def assemble(case, destination, issues=None, cancel=None, progress=None):
     """Build PDF without Word/LibreOffice. All selected source pages are preserved."""
+    def checkpoint(message):
+        if cancel is not None and cancel.is_set():
+            raise InterruptedError('Package creation cancelled. Your previous exported files are unchanged.')
+        if progress:progress(message)
+    checkpoint('Checking the package and selected sources...')
     destination = Path(destination); destination.parent.mkdir(parents=True,exist_ok=True)
     errors = list(dict.fromkeys((issues or [])+validate(case)))
+    sources=export_sources(case)
     with tempfile.TemporaryDirectory(dir=destination.parent,prefix='.cor-build-') as temp:
         temp = Path(temp); doc = fitz.open(); manifest=[]
         try:
             for role in ORDER:
                 for item in case.get('package_documents',[]):
                     if item.get('role')!=role: continue
+                    checkpoint('Adding '+ROLES[role]+'...')
                     path = Path(item['path']); start=len(doc)+1
                     if path.suffix.lower()=='.pdf':
                         with fitz.open(path) as source:
                             if source.needs_pass: raise ValueError(f'Unlock PDF: {path.name}')
                             pages=parse_pages(item.get('pages'),len(source))
-                            for index in pages: doc.insert_pdf(source,from_page=index,to_page=index)
+                            for index in pages:
+                                checkpoint(f'Adding {ROLES[role]}: page {index+1}...')
+                                append_pdf_page(doc,source,index)
                     else:
                         if path.suffix.lower() not in ('.png','.jpg','.jpeg','.webp','.bmp','.tiff','.tif'):
                             raise ValueError(f'Save {path.name} as a PDF before export. Nothing was silently omitted.')
@@ -530,6 +654,7 @@ def assemble(case, destination, issues=None):
             if not any(x['section']==ROLES['invoice'] for x in manifest):
                 page=new_page(doc,'Final Invoice Missing');page.insert_text((32,100),'INCOMPLETE DRAFT - Attach and review the final invoice.',fontsize=11)
             for i,load in enumerate(case['loads'],1):
+                checkpoint(f'Adding load {i} of {len(case["loads"])}...')
                 start=len(doc)+1
                 template_load_pages(doc,load,i)
                 additional=[('Unloading / Disposal',load.get('disposal_photo')),('First 10 CYD Evidence',load.get('evidence_first_10_cyd'))]
@@ -541,19 +666,34 @@ def assemble(case, destination, issues=None):
             for key,title in [('before_photos','Before Photos'),('during_photos','During Photos'),('after_photos','After Photos')]:
                 paths=case.get(key,[])
                 if paths:
-                    start=len(doc)+1;property_photo_pages(doc,paths,title)
+                    start=len(doc)+1
+                    for offset in range(0,len(paths),9):
+                        checkpoint(f'Adding {title.lower()}: {min(offset+9,len(paths))} of {len(paths)}...')
+                        property_photo_pages(doc,paths[offset:offset+9],title)
                     manifest.append(dict(section=title,start_page=start,end_page=len(doc)))
             # Internal checks are saved separately, never printed in the package.
             if not errors:
                 (temp/'COR_Request_Description.txt').write_text(description(case),encoding='utf-8')
-            report=dict(status='Items Missing' if errors else 'Complete',issues=errors,pages=len(doc),sections=manifest)
+            report=dict(status='Items Missing' if errors else 'Complete',issues=errors,pages=len(doc),sections=manifest,sources=sources)
             doc.set_metadata({'title':f"ED COR Package - {case.get('case_number','Case')} - DRAFT",'author':'ED Package Builder'})
+            checkpoint('Finishing the PDF...')
             doc.save(temp/'package.pdf',garbage=3,deflate=True)
         finally: doc.close()
-        # Publish only after the entire document was assembled successfully.
-        os.replace(temp/'package.pdf',destination)
-        (destination.parent/'Package_Review.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+        # Refuse a mixture of old and changed source bytes, preserving the prior PDF.
+        from calculator_evidence import file_digest
+        for index,item in enumerate(sources,1):
+            checkpoint(f'Verifying source {index} of {len(sources)}...')
+            if file_digest(item['path'])!=item['sha256']:
+                raise ValueError('A source changed during export. Inspect it again before exporting.')
+        with fitz.open(temp/'package.pdf') as checked:
+            if len(checked)!=report['pages'] or checked.needs_pass:
+                raise ValueError('The finished PDF could not be verified.')
+        # Stage the report and description before publishing any previous output.
+        from export_bundle import publish_bundle
+        review=temp/'Package_Review.json'
+        review.write_text(json.dumps(report,indent=2),encoding='utf-8')
         desc=destination.parent/'COR_Request_Description.txt'
-        if (temp/desc.name).exists(): os.replace(temp/desc.name,desc)
-        elif desc.exists(): desc.unlink()  # Never leave a description from an older, valid state.
+        checkpoint('Saving the verified package...')
+        publish_bundle([(destination,temp/'package.pdf'),(destination.parent/review.name,review),
+                        (desc,temp/desc.name if (temp/desc.name).exists() else None)])
     return report

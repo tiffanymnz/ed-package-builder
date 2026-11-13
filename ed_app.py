@@ -856,7 +856,9 @@ class App:
             except Exception as e:
                 issues.append(f'BLOCKING / Load {i} measurement: {e}')
                 volumes.append(0)
+            from load_requirements import applicable
             for key in ('height', 'width', 'length', 'empty', 'quarter', 'half', 'three_quarters', 'full_1', 'full_2', 'receipt'):
+                if not applicable(l,key):continue
                 if not l.get('photos', {}).get(key):
                     issues.append(f'BLOCKING / Load {i}: missing template image {key}')
             if not l.get('disposal_photo'):
@@ -1029,6 +1031,25 @@ def packaged_smoke_test(report_path):
             assert review['loads'][0]['calculator_issue'], 'Missing calculator screenshot was not flagged'
             result['step'] = 'Load guided interface module'
             from guided_ui import GuidedApp
+            from package_ui import PackageApp
+            from photo_flow import BackgroundPhotoWork
+            from load_identity import combine_readings
+            from load_text_runtime import ASSETS as load_reader_assets
+            from tokenizers import Tokenizer
+            assert Tokenizer is not None and PackageApp is not None
+            result['load_reader_download_bytes']=sum(item['size'] for item in load_reader_assets)
+            assert result['load_reader_download_bytes']<500_000_000
+            from photo_inspector import inspect_photos
+            from background_task import run_file_task
+            from workflow_status import package_inventory
+            from load_card_review import CardReviewWindow
+            from loading_sequence import LoadingSequenceWindow
+            from load_groups import confirm_card
+            from photo_semantics import measurement_relevance
+            from photo_stage_head import predict_stage
+            result['photo_review_modules_available']=True
+            result['workflow_modules_available']=True
+            result['load_reader_available']=True
             from calculator_evidence import screenshot_status
             assert screenshot_status(example['loads'][0])[0] is None
             result['step'] = 'Load PDF package module'
@@ -1050,9 +1071,18 @@ def packaged_smoke_test(report_path):
     Path(report_path).parent.mkdir(parents=True, exist_ok=True)
     Path(report_path).write_text(json.dumps(result, indent=2), encoding='utf-8')
     return 0 if result['status'] == 'PASS' else 1
-if __name__ == '__main__':
+def main():
+    if len(sys.argv)==3 and sys.argv[1]=='--card-reader-smoke-test':
+        from card_reader_smoke import run
+        return run(sys.argv[2])
+    if len(sys.argv)==3 and sys.argv[1]=='--ui-smoke-test':
+        from ui_smoke import run
+        return run(sys.argv[2])
+    if len(sys.argv)==3 and sys.argv[1]=='--vision-smoke-test':
+        from vision_smoke import run
+        return run(sys.argv[2])
     if len(sys.argv) == 3 and sys.argv[1] == '--smoke-test':
-        sys.exit(packaged_smoke_test(sys.argv[2]))
+        return packaged_smoke_test(sys.argv[2])
     BASE.mkdir(exist_ok=True)
     sys.modules.setdefault('ed_app', sys.modules[__name__])
     from guided_ui import GuidedApp
@@ -1060,3 +1090,7 @@ if __name__ == '__main__':
     root = tk.Tk()
     app = PackageApp(root)
     root.mainloop()
+
+    return 0
+
+if __name__ == '__main__':sys.exit(main())
