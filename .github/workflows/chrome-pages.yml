@@ -1,0 +1,52 @@
+name: Chrome Website
+on:
+  push:
+    branches: [main]
+    paths: ['chrome-web-source.b64', '.github/workflows/chrome-pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: chrome-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: base64 --decode chrome-web-source.b64 > chrome-web-source.zip
+      - run: unzip -q chrome-web-source.zip -d chrome-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: chrome-source/web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+        working-directory: chrome-source/web
+      - run: npm test
+        working-directory: chrome-source/web
+      - run: node prepare_runtime.mjs
+        working-directory: chrome-source/web
+      - run: python download_models.py
+        working-directory: chrome-source/web
+      - run: npm run build
+        working-directory: chrome-source/web
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: chrome-source/web/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Chrome website
+        id: deployment
+        uses: actions/deploy-pages@v4
