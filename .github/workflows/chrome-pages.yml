@@ -1,7 +1,7 @@
 name: Chrome Website
 on:
   push:
-    branches: [web/chrome-standalone]
+    branches: [main]
     paths: ['chrome-web-source.b64', '.github/workflows/chrome-pages.yml']
   workflow_dispatch:
 permissions:
