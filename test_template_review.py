@@ -11,7 +11,7 @@ from PIL import Image,PngImagePlugin
 from calculator_evidence import file_digest
 from local_photo_sorter import MODEL_DIGEST,VERSION
 from review_assist import encode_embedding,image_features
-from template_review import TemplateCandidateIndex,TemplateReviewWindow,assign_template_photo,measurement_view_clues
+from template_review import TemplateCandidateIndex,TemplateReviewWindow,assign_template_photo,measurement_view_clues,dismiss_template_photo
 from template_slot_head import predict_slots
 
 class TemplateCandidateTests(unittest.TestCase):
@@ -28,15 +28,73 @@ class TemplateCandidateTests(unittest.TestCase):
         return str(path)
     def index(self):
         with patch('template_review.predict_slots',return_value={'height':.8,'width':.1,'other':.1}):return TemplateCandidateIndex(self.case)
+    def test_confirmed_load_beats_unreviewed_text_and_visual_scores(self):
+        index=self.index();path=self.case['imported_files'][-1]['path']
+        self.case['photo_load_assignments']={path:dict(load=1,sha256=file_digest(path))}
+        index.scores[path]={'height':.16,'other':.1}
+        index.text[self.case['imported_files'][0]['path']]={'slot':'height','load':1}
+        self.assertEqual(index.shortlist(self.case,1,'height')[0][0]['path'],path)
+    def test_reviewed_load_overrides_ocr_load_but_stale_review_does_not(self):
+        index=self.index();path=self.case['imported_files'][-1]['path'];index.text[path]={'slot':'height','load':2};index.groups[path]=dict(load=2,vendor_load=2)
+        self.case['photo_load_assignments']={path:dict(load=1,sha256=file_digest(path))}
+        self.assertIn(path,{r['path'] for r in index.shortlist(self.case,1,'height',limit=20)[0]})
+        self.case['photo_load_assignments'][path]['sha256']='changed'
+        self.assertNotIn(path,{r['path'] for r in index.shortlist(self.case,1,'height',limit=20)[0]})
+    def test_confirmed_load_keeps_uncertain_measurement_axes_available(self):
+        index=self.index();path=self.case['imported_files'][-1]['path']
+        index.scores[path]={'height':.11,'width':.09,'length':.08,'other':.6}
+        self.case['photo_load_assignments']={path:dict(load=1,sha256=file_digest(path))}
+        self.assertIn(path,{r['path'] for r in index.shortlist(self.case,1,'width',limit=20)[0]})
+        self.assertNotIn(path,{r['path'] for r in index.shortlist(self.case,1,'quarter',limit=20)[0]})
+    def test_other_numbered_group_is_hidden_until_browse_but_manual_correction_wins(self):
+        index=self.index();path=self.case['imported_files'][0]['path'];index.groups={path:dict(load=2)}
+        self.assertNotIn(path,{r['path'] for r in index.shortlist(self.case,1,'height',limit=20)[0]})
+        self.assertIn(path,{r['path'] for r in index.shortlist(self.case,1,'height',browse_all=True,limit=20)[0]})
+        self.case['photo_load_assignments']={path:dict(load=1,sha256=file_digest(path))}
+        self.assertIn(path,{r['path'] for r in index.shortlist(self.case,1,'height',limit=20)[0]})
     def test_shortlists_do_not_assign_or_change_measurements(self):
         original=copy.deepcopy(self.case);index=self.index();rows,total=index.shortlist(self.case,1,'height')
         self.assertEqual(len(rows),3);self.assertEqual(total,5);self.assertEqual(self.case,original)
-    def test_known_other_load_and_existing_other_load_sources_are_excluded(self):
+    def test_dismissal_removes_only_this_load_box_and_preserves_evidence(self):
+        index=self.index();row=index.shortlist(self.case,1,'height')[0][0];original=copy.deepcopy(self.case)
+        dismiss_template_photo(self.case,1,'height',row)
+        self.assertNotIn(row['path'],{r['path'] for r in index.shortlist(self.case,1,'height',browse_all=True,limit=20)[0]})
+        self.assertIn(row['path'],{r['path'] for r in index.shortlist(self.case,1,'width',browse_all=True,limit=20)[0]})
+        self.assertIn(row['path'],{r['path'] for r in index.shortlist(self.case,2,'height',browse_all=True,limit=20)[0]})
+        self.assertEqual(self.case['loads'],original['loads']);self.assertEqual(self.case['imported_files'],original['imported_files'])
+    def test_changed_source_cannot_be_dismissed(self):
+        row=self.index().shortlist(self.case,1,'height')[0][0];Path(row['path']).write_bytes(b'changed')
+        with self.assertRaises(ValueError):dismiss_template_photo(self.case,1,'height',row)
+        self.assertNotIn('template_photo_dismissals',self.case)
+    def test_old_dismissal_does_not_hide_replaced_source(self):
+        row=self.index().shortlist(self.case,1,'height')[0][0];dismiss_template_photo(self.case,1,'height',row)
+        self.case['template_photo_dismissals']['1:height'][row['path']]['sha256']='old-source'
+        self.assertIn(row['path'],{r['path'] for r in self.index().shortlist(self.case,1,'height',limit=20)[0]})
+    def test_selected_photo_cannot_be_dismissed(self):
+        row=self.index().shortlist(self.case,1,'height')[0][0];self.case['loads'][0]['photos']['height']=row['path']
+        with self.assertRaises(ValueError):dismiss_template_photo(self.case,1,'height',row)
+        self.assertEqual(self.case['loads'][0]['photos']['height'],row['path'])
+    def test_other_load_measurements_require_browse_all_and_explicit_confirmation(self):
         index=self.index();p=self.case['imported_files'][0]['path'];q=self.case['imported_files'][1]['path']
         self.case['loads'][1]['photos']['height']=p
         self.case['photo_load_assignments']={q:dict(load=2,sha256=file_digest(q))}
-        rows,total=index.shortlist(self.case,1,'height',browse_all=True,limit=20)
+        rows,total=index.shortlist(self.case,1,'height',limit=20)
         self.assertNotIn(p,{r['path'] for r in rows});self.assertNotIn(q,{r['path'] for r in rows})
+        rows,total=index.shortlist(self.case,1,'height',browse_all=True,limit=20)
+        self.assertIn(p,{r['path'] for r in rows});self.assertIn(q,{r['path'] for r in rows})
+    def test_shared_measurement_needs_confirmation_and_never_copies_dimensions(self):
+        path=self.case['imported_files'][0]['path'];candidate=dict(path=path,sha256=file_digest(path))
+        self.case['loads'][1].update(photos={'height':path},length_ft='99')
+        with self.assertRaises(ValueError):assign_template_photo(self.case,1,'height',candidate)
+        assign_template_photo(self.case,1,'height',candidate,shared_container_confirmed=True)
+        self.assertEqual(self.case['loads'][0]['length_ft'],'19');self.assertFalse(self.case['loads'][0]['measurements_confirmed'])
+        self.assertTrue(self.case['shared_container_measurements']['1:height']['container_match_confirmed'])
+    def test_sharing_cannot_reuse_progression_or_a_different_measurement_axis(self):
+        path=self.case['imported_files'][0]['path'];candidate=dict(path=path,sha256=file_digest(path))
+        self.case['loads'][1]['photos']['half']=path
+        with self.assertRaises(ValueError):assign_template_photo(self.case,1,'half',candidate,shared_container_confirmed=True)
+        self.case['loads'][1]['photos']={'width':path}
+        with self.assertRaises(ValueError):assign_template_photo(self.case,1,'height',candidate,shared_container_confirmed=True)
     def test_filename_does_not_supply_a_load_number(self):
         self.case['imported_files'][0]['name']='Load 9 Height Full.png'
         rows,total=self.index().shortlist(self.case,1,'height',limit=20)
@@ -136,6 +194,14 @@ class TemplateReviewUiTests(unittest.TestCase):
         saved=json.loads((self.folder/'case.json').read_text())
         self.assertEqual(saved['loads'][0]['photos']['height'],row['path']);self.assertEqual(self.window.slot(),'width')
         self.assertEqual(self.errors,[])
+    def test_dismiss_and_restore_replace_suggestions_without_assigning_photos(self):
+        self.window.tree.selection_set('height');self.window.reset_page();self.root.update()
+        row=self.window.index.shortlist(self.app.case,1,'height')[0][0];self.window.dismiss(row);self.root.update()
+        self.assertNotIn(row['path'],{r['path'] for r in self.window.index.shortlist(self.app.case,1,'height')[0]})
+        self.assertEqual(self.app.case['loads'][0]['photos'],{})
+        saved=json.loads((self.folder/'case.json').read_text());self.assertIn(row['path'],saved['template_photo_dismissals']['1:height'])
+        self.window.restore_dismissed();self.root.update()
+        self.assertIn(row['path'],{r['path'] for r in self.window.index.shortlist(self.app.case,1,'height')[0]});self.assertEqual(self.errors,[])
     def test_changed_photo_is_rejected_and_other_boxes_stay_unchanged(self):
         row=self.window.index.shortlist(self.app.case,1,'height')[0][0];Path(row['path']).write_bytes(b'changed')
         with patch('tkinter.messagebox.showwarning') as warning:self.window.use(row)
@@ -148,10 +214,15 @@ class TemplateReviewUiTests(unittest.TestCase):
     def test_three_candidate_actions_are_accessible_on_a_smaller_window(self):
         self.window.win.geometry('900x650');self.root.update();self.window.render();self.root.update()
         buttons=[w for w in self.widgets(self.window.cards) if isinstance(w,tk.ttk.Button) and w.cget('text')=='Use This Photo']
-        self.assertEqual(len(buttons),3)
+        self.assertEqual(len(buttons),self.window.PAGE_SIZE)
         navigation=[w for w in self.widgets(self.window.paging) if isinstance(w,tk.ttk.Button)]
-        self.assertEqual(len(navigation),3)
-        buttons+=navigation+[self.window.progress]
+        self.assertEqual(len(navigation),2)
+        dismiss_buttons=[w for w in self.widgets(self.window.cards) if isinstance(w,tk.ttk.Button) and w.cget('text')=='Not a Match']
+        self.assertEqual(len(dismiss_buttons),self.window.PAGE_SIZE)
+        previews=[w for w in self.widgets(self.window.cards) if isinstance(w,tk.ttk.Label) and str(w.cget('image'))]
+        self.assertTrue(previews)
+        for preview in previews:self.assertTrue(preview.winfo_ismapped());self.assertGreater(preview.winfo_height(),40)
+        buttons+=navigation+dismiss_buttons+[self.window.progress]
         for button in buttons:
             self.assertTrue(button.winfo_ismapped())
             self.assertLessEqual(button.winfo_rootx()+button.winfo_width(),self.window.win.winfo_rootx()+self.window.win.winfo_width())

@@ -17,7 +17,7 @@ LABELS={'property_before':'Property Before Removal','property_during':'Property 
 LABELS.update({'documents':'Documents (Confirm Purpose)','container_photos':'Container Photos','property_photos':'Property Photos'})
 BROAD_CATEGORIES=['invoice','bid','dump_receipt','measurement','container_photos','property_photos','other','unclear']
 PROMPT='Look at the image. Classify the visible object, not the service described in its text. Categories: invoice (a bill requesting payment), bid (a price quote or estimate), dump_receipt (a disposal or scale ticket), measurement (a tape measure or dimensions), container_photos (a truck, trailer or dumpster), property_photos (a yard, building, land or debris at a property), other, unclear. A paper invoice about debris removal is invoice, NOT property_photos. Return category, load_number as null unless a load number is readable, and a short reason.'
-VERSION=hashlib.sha256((PROMPT+';category-head-1-v26').encode()).hexdigest()
+VERSION=hashlib.sha256((PROMPT+';category-head-1-v26;property-stage-1-v41').encode()).hexdigest()
 
 from small_vision_runtime import RUNTIME, MODEL_ID, MODEL_DIGEST, SetupCancelled
 

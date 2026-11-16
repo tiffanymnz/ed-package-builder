@@ -11,11 +11,15 @@ from test_cor_package import fixture
 
 class PackageWorkspaceTests(unittest.TestCase):
     def setUp(self):
+        # An unexpected error must fail CI instead of waiting in an unseen dialog.
+        dialog=patch('tkinter.messagebox.showerror',side_effect=AssertionError('Unexpected application error dialog'))
+        dialog.start();self.addCleanup(dialog.stop)
         try:self.root=tk.Tk()
         except tk.TclError as exc:self.skipTest(str(exc))
         self.temp=tempfile.TemporaryDirectory();self.folder=Path(self.temp.name)
         self.errors=[];self.root.report_callback_exception=lambda *args:self.errors.append(args)
         self.app=PackageApp(self.root)
+        background=patch.object(self.app,'start_photo_work');background.start();self.addCleanup(background.stop)
         self.app.case=fixture(self.folder);self.app.case_dir=self.folder
         # Unique synthetic sources make the reuse audit meaningful during end-to-end validation.
         counter=0
@@ -117,6 +121,22 @@ class PackageWorkspaceTests(unittest.TestCase):
         self.assertTrue((self.folder/'output'/'TEST-001_COR_PACKAGE_DRAFT.pdf').is_file())
         self.assertIn('$1,049.65',(self.folder/'output'/'COR_Request_Description.txt').read_text())
 
+    def test_partial_load_is_consistent_through_actual_app_validation(self):
+        load=self.app.case['loads'][0];load['fill_fraction']='.5';load['measurements_confirmed']=True
+        for slot in ('three_quarters','full_1','full_2'):load['photos'].pop(slot,None)
+        issues=self.app.evaluate()[3]
+        self.assertFalse(any('missing template image '+slot in issue or 'Add '+slot.replace('_',' ')+' evidence' in issue for slot in ('three_quarters','full_1','full_2') for issue in issues))
+
+    def test_incomplete_external_export_removes_previous_description(self):
+        with tempfile.TemporaryDirectory() as folder:
+            pdf=Path(folder)/'package.pdf';description=pdf.with_suffix('.description.txt')
+            pdf.write_bytes(b'previous pdf');description.write_text('previous payable description')
+            self.app.case['financial_confirmation_hash']='expired'
+            with patch.object(self.app,'_case_temp',object()),patch('tkinter.filedialog.asksaveasfilename',return_value=str(pdf)),patch('tkinter.messagebox.askyesno',return_value=True),patch('tkinter.messagebox.showinfo'),patch('tkinter.messagebox.showerror') as error:
+                self.app.generate()
+            error.assert_not_called();self.assertFalse(description.exists())
+            self.assertTrue(pdf.read_bytes().startswith(b'%PDF'))
+
     def test_import_first_and_every_step_action_visible(self):
         self.root.geometry('900x640');self.root.update()
         for i,title in enumerate(['Import Files','Review Loads','Review Costs','Create Package']):
@@ -149,6 +169,7 @@ class PackageWorkspaceTests(unittest.TestCase):
         invoice=next(d for d in self.app.case['package_documents'] if d['role']=='invoice')
         self.assertTrue(invoice['confirmed'])
         self.assertEqual(Path(invoice['path']).read_bytes(),source.read_bytes())
+        self.app.case['financial_confirmation_hash']=financial_fingerprint(self.app.case)
         self.app.case['bid_review_confirmed']=True
         self.app.case['bid_confirmation_hash']=bid_fingerprint(self.app.case)
         self.assertEqual(self.app.evaluate()[3],[])

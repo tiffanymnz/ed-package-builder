@@ -17,7 +17,10 @@ CRITERIA = {
     'load': 'The selected photos document a container, measurement, load progression or disposal receipt. They do not establish the property work stage.',
 }
 DATE = r'(?:20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]20\d{2})'
-TIME = r'\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?'
+TIME = r'\d{1,2}:\d{2}(?::\d{2})?\s*\.?\s*(?:AM|PM)?'
+MONTHS={name.lower():i for i,name in enumerate(('January','February','March','April','May','June','July','August','September','October','November','December'),1)}
+MONTHS.update({name[:3]:value for name,value in list(MONTHS.items())})
+NAMED_DATE=r'(?:\b|(?<=day)|(?<=days))(?P<month>'+ '|'.join(sorted(MONTHS,key=len,reverse=True))+r')\s+(?P<day>\d{1,2})(?:\s*[, :]\s*|\s+)(?P<year>20\d{2})\b'
 
 def normalize_date(raw):
     values = re.split(r'[-/.:]', raw)
@@ -50,19 +53,29 @@ def timing_clues(path, text=''):
                 if date:clues.append(dict(source='Camera Metadata',value=raw,date=date,time=None,precision='Date Only',verified=False))
     except Exception:pass
     seen=set()
-    for match in re.finditer(r'(?P<date>'+DATE+r')(?:[ T]+(?P<time>'+TIME+r'))?',text,re.I):
+    for match in re.finditer(r'(?P<date>'+DATE+r')(?:(?:[ T]+|\s*[.,]?\s*at\s*)(?P<time>'+TIME+r'))?',text,re.I):
         raw=match.group(0).strip()
         if raw in seen:continue
         seen.add(raw)
         time=None
         if match.group('time'):
-            value=match.group('time').strip().upper()
+            value=match.group('time').strip().upper().replace('.', '')
             for format in ('%H:%M:%S','%H:%M','%I:%M:%S %p','%I:%M %p','%I:%M:%S%p','%I:%M%p'):
                 try:time=datetime.strptime(value,format).strftime('%H:%M:%S');break
                 except ValueError:pass
         clues.append(dict(source='Photo Text (Unverified OCR)',value=raw,date=normalize_date(match.group('date')),time=time,
             precision='Date and Time' if match.group('time') else 'Date Only',verified=False))
     flags=[]
+    for match in re.finditer(NAMED_DATE+r'(?:(?:[ T]+|\s*[.,]?\s*at\s*)(?P<clock>'+TIME+r'))?',text,re.I):
+        try:date=datetime(int(match['year']),MONTHS[match['month'].lower()],int(match['day'])).strftime('%Y-%m-%d')
+        except ValueError:continue
+        clock=None
+        if match['clock']:
+            value=match['clock'].strip().upper().replace('.', '')
+            for pattern in ('%H:%M:%S','%H:%M','%I:%M:%S %p','%I:%M %p','%I:%M:%S%p','%I:%M%p'):
+                try:clock=datetime.strptime(value,pattern).strftime('%H:%M:%S');break
+                except ValueError:pass
+        clues.append(dict(source='Photo Text (Unverified OCR)',value=match.group(),date=date,time=clock,precision='Date and Time' if clock else 'Date Only',verified=False))
     dates={clue['date'] for clue in clues if clue['date']}
     if len(dates)>1:flags.append('Date Clues Differ - Review the Sources')
     if any(not clue['date'] for clue in clues):flags.append('Date Format Needs Review')

@@ -9,6 +9,7 @@ DIMENSIONS = ('length_ft', 'width_ft', 'side_height_ft', 'overage_height_ft', 'o
 
 def measurement_signature(load):
     values = {key: float(load.get(key, 1 if key == 'fill_fraction' else 0) or 0) for key in DIMENSIONS}
+    if load.get('quantity_rounding','full_precision')!='full_precision':values['quantity_rounding']=load['quantity_rounding']
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 def file_digest(path):

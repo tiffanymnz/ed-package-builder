@@ -2,6 +2,8 @@ name: Build Windows Portable
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
@@ -37,18 +39,39 @@ jobs:
           python -m pip install pyinstaller
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Prepare verified test weights and block test network
+        run: |
+          "ED_STARTUP_LOG_DIR=$env:RUNNER_TEMP/ed-startup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $modelDir = Join-Path $env:RUNNER_TEMP 'ed-test-model'
+          New-Item -ItemType Directory -Force $modelDir | Out-Null
+          $model = Join-Path $modelDir 'vision.onnx'
+          Invoke-WebRequest -Uri 'https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/onnx/vision_model_quantized.onnx' -OutFile $model
+          if ((Get-Item $model).Length -ne 89117001 -or (Get-FileHash $model -Algorithm SHA256).Hash.ToLower() -ne '583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299') { throw 'Test model verification failed' }
+          $env:ED_PHOTO_TEST_MODEL_DIR = $modelDir
+          "ED_PHOTO_TEST_MODEL_DIR=$modelDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $cardModelDir = Join-Path $env:RUNNER_TEMP 'ed-card-test-model'
+          python ci_prepare_card_models.py $cardModelDir
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:ED_CARD_TEST_MODEL_DIR = $cardModelDir
+          "ED_CARD_TEST_MODEL_DIR=$cardModelDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $python = (Get-Command python).Source
+          New-NetFirewallRule -DisplayName 'ED CI Python Offline' -Direction Outbound -Program $python -Action Block -Profile Any -ErrorAction Stop | Out-Null
+          python -c "from vision_smoke import run; raise SystemExit(run('vision-source.json'))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run tests
-        run: python -m unittest discover -p "test_*.py" -v
+        timeout-minutes: 5
+        run: python -X faulthandler ci_tests.py
 
       - name: Build portable application
         run: |
-          python -m py_compile ed_builder.py ed_app.py
+          python -m py_compile ed_builder.py ed_app.py app_launcher.py export_bundle.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           python -c "import ed_builder; print('Builder loaded:', ed_builder.__file__); import ed_app; print('Application imports passed')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          python -m PyInstaller --noconfirm --clean --console --onedir --paths "." --hidden-import ed_builder --name ED_Package_Builder --add-data "Debris Progression template.docx;." --collect-submodules fitz --collect-submodules PIL ed_app.py
+          python -m PyInstaller --noconfirm --clean --windowed --onedir --paths "." --hidden-import ed_builder --hidden-import ed_app --name ED_Package_Builder --add-data "Debris Progression template.docx;." --add-data "assets/handwriting;assets/handwriting" --collect-submodules fitz --collect-submodules PIL app_launcher.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           if (!(Test-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe')) {
@@ -57,6 +80,46 @@ jobs:
           if (!(Test-Path 'dist/ED_Package_Builder/_internal/Debris Progression template.docx')) {
             throw 'Bundled template missing'
           }
+
+      - name: Test frozen native photo engine offline
+        timeout-minutes: 3
+        run: |
+          $exe = (Resolve-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe').Path
+          New-NetFirewallRule -DisplayName 'ED CI App Offline' -Direction Outbound -Program $exe -Action Block -Profile Any -ErrorAction Stop | Out-Null
+          $report = Join-Path $env:RUNNER_TEMP 'vision-frozen.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--vision-smoke-test', "`"$report`"") -PassThru
+          if (!$process.WaitForExit(120000)) { taskkill /PID $process.Id /T /F; throw 'Native engine timed out' }
+          $process.Refresh()
+          if ($process.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Native engine failed' }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if ($result.status -ne 'PASS' -or !$result.app_frozen) { throw 'Native engine smoke failed' }
+          Get-Content $report -Raw
+
+      - name: Test frozen native card reader offline
+        timeout-minutes: 3
+        run: |
+          $exe = (Resolve-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe').Path
+          $report = Join-Path $env:RUNNER_TEMP 'card-reader-frozen.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--card-reader-smoke-test', "`"$report`"") -PassThru
+          if (!$process.WaitForExit(120000)) { taskkill /PID $process.Id /T /F; throw 'Card reader timed out' }
+          $process.Refresh()
+          if ($process.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Card reader failed' }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if ($result.status -ne 'PASS' -or !$result.app_frozen -or !$result.onnx_cpu_inference) { throw 'Card reader smoke failed' }
+          Get-Content $report -Raw
+
+      - name: Test frozen application interface
+        timeout-minutes: 2
+        run: |
+          $exe = (Resolve-Path 'dist/ED_Package_Builder/ED_Package_Builder.exe').Path
+          $report = Join-Path $env:RUNNER_TEMP 'ui-frozen.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--ui-smoke-test', "`"$report`"") -PassThru
+          if (!$process.WaitForExit(60000)) { taskkill /PID $process.Id /T /F; throw 'Interface startup timed out' }
+          $process.Refresh()
+          if ($process.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Interface startup failed' }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if ($result.status -ne 'PASS' -or !$result.app_frozen) { throw 'Interface smoke failed' }
+          Get-Content $report -Raw
 
       - name: Test executable
         timeout-minutes: 3
@@ -118,6 +181,12 @@ jobs:
         with:
           name: ED_Build_Diagnostics
           path: |
+            ${{ runner.temp }}/ed-startup/
+            vision-source.json
+            ${{ runner.temp }}/ui-frozen.json
+            ${{ runner.temp }}/ed-ui-proof/
+            ${{ runner.temp }}/vision-frozen.json
+            ${{ runner.temp }}/card-reader-frozen.json
             ${{ runner.temp }}/smoke.json
             ${{ runner.temp }}/smoke-out.txt
             ${{ runner.temp }}/smoke-error.txt
