@@ -122,9 +122,12 @@ class SmallVisionRuntime:
                 from photo_category_head import predict_category,image_has_content
                 adapted=predict_category(vector)
                 if not image_has_content(path):adapted['category']='unclear'
+                from measurement_controls import supports_measurement
+                measurement_withheld=adapted['category']=='measurement' and not supports_measurement(vector)
+                if measurement_withheld:adapted['category']='unclear'
                 category=adapted['category']
                 from review_assist import encode_embedding
-                return dict(embedding=encode_embedding(vector),category=category,category_score=adapted['category_score'],head_version=adapted['head_version'],load_number=None,reason='Visual category suggestion; confirm the photo purpose.',verified=False,
+                return dict(embedding=encode_embedding(vector),category=category,category_score=adapted['category_score'],head_version=adapted['head_version'],load_number=None,reason='Small-object photo needs review before treating it as a measurement.' if measurement_withheld else 'Visual category suggestion; confirm the photo purpose.',verified=False,
                             similarity=round(score,4),margin=round(margin,4))
             finally:
                 self.idle_timer=threading.Timer(300,self.stop);self.idle_timer.daemon=True;self.idle_timer.start()

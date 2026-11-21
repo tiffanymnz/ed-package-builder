@@ -1,0 +1,4 @@
+PaddlePaddle/en_PP-OCRv5_mobile_rec
+Copyright PaddlePaddle Authors. Licensed under Apache License 2.0.
+Converted from official revision 267c36e24c331595590fe7bd72bde2436fd286f2 to ONNX for local inference.
+Conversion changes format; original model attribution and license retained.
